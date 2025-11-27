@@ -326,7 +326,7 @@
             });
             
             // Sci-Hub按钮点击事件
-            scihubButton.addEventListener('click', function() {
+            scihubButton.addEventListener('click', async function() {
                 const doi = doiInput.value.trim();
                 
                 if (!doi) {
@@ -334,15 +334,79 @@
                     return;
                 }
                 
-                // 构建Sci-Hub URL
-                const scihubUrl = 'https://www.sci-hub.cat/' + doi;
+                // 显示加载状态
+                const originalText = scihubButton.textContent;
+                scihubButton.textContent = '检测可用域名...';
+                scihubButton.disabled = true;
                 
-                // 显示生成的URL
-                generatedUrl.textContent = scihubUrl;
-                resultSection.style.display = 'block';
-                
-                // 在新标签页中打开URL
-                window.open(scihubUrl, '_blank');
+                try {
+                    // Sci-Hub常用域名列表（按稳定性排序）
+                    const scihubDomains = [
+                        'https://sci-hub.se',
+                        'https://sci-hub.st',
+                        'https://sci-hub.ru',
+                        'https://sci-hub.cat',
+                        'https://sci-hub.ee',
+                        'https://sci-hub.do',
+                        'https://sci-hub.shop'
+                    ];
+                    
+                    let availableDomain = null;
+                    
+                    // 快速检测可用的域名
+                    for (const domain of scihubDomains) {
+                        try {
+                            // 使用HEAD请求检测域名是否可用
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), 3000);
+                            
+                            const response = await fetch(domain, {
+                                method: 'HEAD',
+                                mode: 'no-cors',
+                                signal: controller.signal
+                            });
+                            
+                            clearTimeout(timeoutId);
+                            availableDomain = domain;
+                            console.log(`找到可用域名: ${domain}`);
+                            break;
+                        } catch (error) {
+                            console.log(`域名 ${domain} 不可用: ${error.message}`);
+                            continue;
+                        }
+                    }
+                    
+                    // 使用可用的域名或默认的第一个域名
+                    const finalDomain = availableDomain || scihubDomains[0];
+                    const scihubUrl = finalDomain + '/' + doi;
+                    
+                    // 显示生成的URL
+                    let displayText = scihubUrl;
+                    if (!availableDomain) {
+                        displayText += ' (使用默认域名，如不可用请重试)';
+                    }
+                    generatedUrl.textContent = displayText;
+                    resultSection.style.display = 'block';
+                    
+                    // 在新标签页中打开URL
+                    window.open(scihubUrl, '_blank');
+                    
+                } catch (error) {
+                    console.error('检测Sci-Hub域名时出错:', error);
+                    
+                    // 出错时使用默认域名
+                    const defaultDomain = 'https://sci-hub.se';
+                    const scihubUrl = defaultDomain + '/' + doi;
+                    
+                    generatedUrl.textContent = scihubUrl + ' (检测失败，使用默认域名)';
+                    resultSection.style.display = 'block';
+                    
+                    window.open(scihubUrl, '_blank');
+                } finally {
+                    // 恢复按钮状态
+                    scihubButton.textContent = originalText;
+                    scihubButton.disabled = false;
+                }
             });
             
             // LibGen按钮点击事件
