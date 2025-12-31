@@ -89,6 +89,54 @@
             color: #2c3e50;
         }
         
+        .input-with-button {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .input-with-button input[type="text"] {
+            flex: 1;
+        }
+        
+        #pasteButton {
+            background-color: #9b59b6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 0 15px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            white-space: nowrap;
+        }
+        
+        #pasteButton:hover {
+            background-color: #8e44ad;
+        }
+        
+        #prefixButtons {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .prefix-button {
+            background-color: #e1e8ed;
+            border: 1px solid #d5dce0;
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .prefix-button:hover {
+            background-color: #d1d8dd;
+            border-color: #3498db;
+        }
+        
         input[type="text"] {
             width: 100%;
             padding: 12px 15px;
@@ -231,6 +279,14 @@
             .container {
                 padding: 20px;
             }
+            
+            .input-with-button {
+                flex-direction: column;
+            }
+            
+            #pasteButton {
+                padding: 10px;
+            }
         }
     </style>
 </head>
@@ -269,8 +325,21 @@
         
         <div class="input-group">
             <label for="doiInput">DOI（数字对象标识符）</label>
-            <input type="text" id="doiInput" placeholder="例如：10.1103/PhysRevC.106.064325">
-            <p class="example">示例：10.1103/PhysRevC.106.064325</p>
+            <div class="input-with-button">
+                <input type="text" id="doiInput" placeholder="例如：10.1103/PhysRevC.106.064325">
+                <button id="pasteButton">粘贴DOI并添加</button>
+            </div>
+            
+            <div id="prefixButtons">
+                <span class="prefix-button" data-prefix="10.1103/PhysRev">PhysRev</span>
+                <span class="prefix-button" data-prefix="10.1038/">Nature</span>
+                <span class="prefix-button" data-prefix="10.1126/science">Science</span>
+                <span class="prefix-button" data-prefix="10.1016/j.">Elsevier</span>
+                <span class="prefix-button" data-prefix="10.1002/">"Wiley</span>
+                <span class="prefix-button" data-prefix="10.1088/">IOP</span>
+            </div>
+            
+            <p class="example">示例：10.1103/PhysRevC.106.064325 | 点击上方按钮快速添加常用DOI前缀</p>
         </div>
         
         <div class="button-group">
@@ -295,6 +364,8 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const doiInput = document.getElementById('doiInput');
+            const pasteButton = document.getElementById('pasteButton');
+            const prefixButtons = document.querySelectorAll('.prefix-button');
             const apsButton = document.getElementById('apsButton');
             const scihubButton = document.getElementById('scihubButton');
             const libgenButton = document.getElementById('libgenButton');
@@ -303,6 +374,67 @@
             const resultSection = document.getElementById('resultSection');
             const generatedUrl = document.getElementById('generatedUrl');
             const copyUrlButton = document.getElementById('copyUrlButton');
+            
+            // 粘贴按钮点击事件
+            pasteButton.addEventListener('click', async function() {
+                try {
+                    // 从剪贴板读取文本
+                    const text = await navigator.clipboard.readText();
+                    
+                    if (text) {
+                        // 清理粘贴的文本，去除多余空格和换行
+                        const cleanedText = text.trim().replace(/\s+/g, '');
+                        
+                        // 检查是否是完整的DOI
+                        if (cleanedText.startsWith('10.')) {
+                            // 如果是完整的DOI，直接使用
+                            doiInput.value = cleanedText;
+                        } else if (cleanedText.match(/^\d+\.[A-Za-z0-9]+\.[A-Za-z0-9]+/)) {
+                            // 可能是部分DOI，尝试添加10.前缀
+                            doiInput.value = '10.' + cleanedText;
+                        } else {
+                            // 其他文本，直接放入输入框
+                            doiInput.value = cleanedText;
+                        }
+                        
+                        // 显示成功反馈
+                        const originalText = pasteButton.textContent;
+                        pasteButton.textContent = '已粘贴!';
+                        pasteButton.style.backgroundColor = '#27ae60';
+                        
+                        setTimeout(function() {
+                            pasteButton.textContent = originalText;
+                            pasteButton.style.backgroundColor = '#9b59b6';
+                        }, 2000);
+                    }
+                } catch (error) {
+                    console.error('粘贴失败:', error);
+                    alert('无法从剪贴板读取内容。请确保已授予剪贴板访问权限。');
+                }
+            });
+            
+            // 前缀按钮点击事件
+            prefixButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const prefix = this.getAttribute('data-prefix');
+                    const currentValue = doiInput.value.trim();
+                    
+                    if (currentValue) {
+                        // 如果输入框已有内容，在末尾添加前缀（用/分隔）
+                        if (!currentValue.endsWith('/')) {
+                            doiInput.value = currentValue + '/' + prefix;
+                        } else {
+                            doiInput.value = currentValue + prefix;
+                        }
+                    } else {
+                        // 如果输入框为空，直接添加前缀
+                        doiInput.value = prefix;
+                    }
+                    
+                    // 聚焦到输入框
+                    doiInput.focus();
+                });
+            });
             
             // APS Harvest按钮点击事件
             apsButton.addEventListener('click', function() {
