@@ -559,7 +559,7 @@ document.addEventListener('DOMContentLoaded', function() {
     scihubButton.addEventListener('click', async function() {
         const doi = doiInput.value.trim();
         if (!doi) { alert('请输入DOI'); return; }
-        const domains = ['https://sci-hub.se','https://sci-hub.st','https://sci-hub.ru'];
+        const domains = ['https://sci-hub.se','https://sci-hub.st','https://sci-hub.sg','https://sci-hub.ru'];
         let d = domains[0];
         for (const dom of domains) { try { const c = new AbortController(); setTimeout(()=>c.abort(),2000); await fetch(dom,{method:'HEAD',mode:'no-cors',signal:c.signal}); d=dom; break; } catch(e){} }
         const url = d + '/' + doi;
