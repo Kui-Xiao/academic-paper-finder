@@ -9,7 +9,8 @@
 ### 📋 核心功能
 
 - 🔍 **InspireHEP (优先)** — 通过DOI自动获取BibTeX引用，期刊已标准缩写，优先使用InspireHEP API
-- ⚡ **APS Harvest** — 美国物理学会官方全文平台
+- ⚡ **APS Harvest** — 美国物理学会官方全文接口（`harvest.aps.org`，自 2025 起仅开放获取文章可下载）
+- ⚡ **APS PDF 直链** — 按 DOI 拼接 APS 官网全文 PDF 直链（`journals.aps.org/<刊名>/pdf/<DOI>`），走机构订阅 IP，免登录直接下载
 - 📚 **Sci-Hub** — 开放获取学术文献平台（自动检测可用域名）
 - 📖 **Library Genesis** — 数字图书馆资源搜索
 
@@ -27,7 +28,7 @@
 
 ### 🎨 视觉
 
-- **Three.js 3D背景** — 动态粒子星系 + 原子轨道环，鼠标跟随视角
+- **DeepSeek Harness 同款背景** — WebGL2 流体（flowmap + 域噪声，随鼠标流动）+ 90px 2D 粒子网格两层，鼠标可"涂抹"扰动；亮色模式半透明融入浅色底，深色模式全显
 - **实时时钟** — 页面顶部显示当前日期时间
 - **响应式设计** — 桌面/移动端自适应
 
@@ -36,7 +37,8 @@
 ### DOI查询
 1. 输入文献的DOI号（支持智能粘贴识别）
 2. 选择需要的服务：
-   - **APS Harvest**：查看官方全文
+   - **APS PDF**：打开 APS 官网全文 PDF 直链（`journals.aps.org/<刊名>/pdf/<DOI>`，需机构订阅 IP，路径大小写敏感）
+   - **APS Harvest**：harvest 全文接口（自 2025 起仅开放获取文章可下载，非 OA 返回 401/403）
    - **Sci-Hub**：尝试免费下载文献
    - **LibGen搜索**：在Library Genesis中搜索
    - **获取BibTeX**：自动从InspireHEP获取（查不到时在新标签页打开doi2bib.org）
@@ -68,14 +70,15 @@
 
 - [InspireHEP](https://inspirehep.net/) — 高能物理文献数据库（优先）
 - [doi2bib.org](https://www.doi2bib.org/) — BibTeX引用生成工具（回退）
-- [APS Harvest](https://harvest.aps.org/) — APS官方全文
+- [APS Harvest](https://harvest.aps.org/) — APS 官方全文接口（自 2025 起仅开放获取文章可用）
+- [APS 官网 PDF 直链](https://journals.aps.org/) — 按 DOI 直接下载 APS 全文（机构订阅 IP；`journals.aps.org/<刊名>/pdf/<DOI>`，DOI 大小写敏感）
 - [Sci-Hub](https://sci-hub.se/) — 开放获取文献
 - [Library Genesis](https://libgen.gl/) — 数字图书馆
 
 ## 技术栈
 
 - 纯HTML/CSS/JavaScript
-- [Three.js](https://threejs.org/) — 3D粒子背景
+- 背景特效：DeepSeek Harness 同款两层（`deepseek_harness/index.html` 原样搬入，见技能 academic-paper-finder）
 - [InspireHEP API](https://inspirehep.net/api) — BibTeX数据源
 - 响应式设计
 - 数据存储在 localStorage

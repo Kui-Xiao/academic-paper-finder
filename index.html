@@ -4,12 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>学术文献获取工具 - InspireHEP, APS, Sci-Hub & LibGen</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background: linear-gradient(135deg, #f5f7fa 0%, #e4e9f2 100%); color: #333; line-height: 1.6; padding: 20px; min-height: 100vh; transition: background 0.5s, color 0.5s; }
         body.dark-mode { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #e0e0e0; }
-        #three-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+        /* 背景：DeepSeek Harness 同款两层特效（z-0 WebGL2 流体 + z-5 2D 网格）
+           固定深色，不随亮/暗主题变化（用户要求：不做亮暗适配） */
+        #bg-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; overflow: hidden; background: #05070f; }
+        #bg-container canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #bg-container .bg-grid { position: absolute; inset: 0; z-index: 5;
+            -webkit-mask: linear-gradient(#000000fc 0%, #000000e8 8.98%, transparent 100%);
+                    mask: linear-gradient(#000000fc 0%, #000000e8 8.98%, transparent 100%); }
         .container { max-width: 1000px; margin: 0 auto; background-color: rgba(255,255,255,0.92); border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); padding: 30px; position: relative; z-index: 1; backdrop-filter: blur(10px); transition: background-color 0.5s, box-shadow 0.5s; }
         body.dark-mode .container { background-color: rgba(26,26,46,0.92); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
         .theme-toggle { position: fixed; top: 20px; right: 20px; z-index: 10; background: rgba(255,255,255,0.8); border: none; border-radius: 50%; width: 44px; height: 44px; cursor: pointer; font-size: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.3s; display: flex; align-items: center; justify-content: center; }
@@ -25,7 +30,7 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         .platform-cards { display: flex; gap: 20px; margin-bottom: 25px; flex-wrap: wrap; }
-        .platform-card { flex: 1; min-width: 180px; background: #f8f9fa; border-radius: 8px; padding: 15px; border-left: 4px solid #3498db; }
+        .platform-card { flex: 1; min-width: 150px; background: #f8f9fa; border-radius: 8px; padding: 15px; border-left: 4px solid #3498db; }
         .platform-card.scihub { border-left-color: #9b59b6; }
         .platform-card.libgen { border-left-color: #e67e22; }
         .platform-card.doi2bib { border-left-color: #2ecc71; }
@@ -49,6 +54,8 @@
         button:disabled { opacity: 0.6; cursor: not-allowed; }
         #apsButton { background-color: #3498db; color: white; }
         #apsButton:hover:not(:disabled) { background-color: #2980b9; }
+        #apsHarvestButton { background-color: #5dade2; color: white; }
+        #apsHarvestButton:hover:not(:disabled) { background-color: #3fa4dd; }
         #scihubButton { background-color: #9b59b6; color: white; }
         #scihubButton:hover:not(:disabled) { background-color: #8e44ad; }
         #libgenButton { background-color: #e67e22; color: white; }
@@ -127,14 +134,18 @@
     </style>
 </head>
 <body>
-    <div id="three-container"></div>
+    <div id="bg-container">
+        <canvas id="fluid"></canvas>
+        <div class="bg-grid"><canvas id="grid"></canvas></div>
+    </div>
     <button class="theme-toggle" id="themeToggle" title="切换深色模式">🌙</button>
     <div class="container">
         <h1>学术文献获取工具</h1>
-        <p class="description">InspireHEP / APS Harvest / Sci-Hub / LibGen + 批量BibTeX导出</p>
+        <p class="description">InspireHEP / APS Harvest / APS PDF直链 / Sci-Hub / LibGen + 批量BibTeX导出</p>
         <div class="datetime" id="datetimeDisplay"></div>
         <div class="platform-cards">
-            <div class="platform-card"><h3>APS Harvest</h3><p>APS官方全文平台。</p></div>
+            <div class="platform-card"><h3>APS Harvest</h3><p>APS官方全文平台（仅开放获取文章）。</p></div>
+            <div class="platform-card"><h3>APS PDF 直链</h3><p>按 DOI 直接下载 APS 官网全文（机构订阅 IP）。</p></div>
             <div class="platform-card scihub"><h3>Sci-Hub</h3><p>开放获取学术文献平台。</p></div>
             <div class="platform-card libgen"><h3>Library Genesis</h3><p>数字图书馆资源搜索。</p></div>
             <div class="platform-card doi2bib"><h3>InspireHEP (优先)</h3><p>高能物理文献数据库。自动回退doi2bib。</p></div>
@@ -161,7 +172,8 @@
                 <div class="doi-history" id="doiHistory"></div>
             </div>
             <div class="button-group">
-                <button id="apsButton">APS Harvest</button>
+                <button id="apsHarvestButton" title="APS Harvest 接口 harvest.aps.org/v2/journals/articles/&lt;DOI&gt;/fulltext —— 自 2025 起仅开放获取(OA)文章可下载，非 OA 返回 401/403">APS Harvest</button>
+                <button id="apsButton" title="APS 官网 PDF 直链 journals.aps.org/&lt;刊名&gt;/pdf/&lt;DOI&gt;（需机构订阅 IP；路径大小写敏感）">APS PDF</button>
                 <button id="scihubButton">Sci-Hub</button>
                 <button id="libgenButton">LibGen搜索</button>
                 <button id="doi2bibButton">获取BibTeX</button>
@@ -240,6 +252,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const pasteButton = document.getElementById('pasteButton');
     const prefixButtons = document.querySelectorAll('.prefix-button');
     const apsButton = document.getElementById('apsButton');
+    const apsHarvestButton = document.getElementById('apsHarvestButton');
     const scihubButton = document.getElementById('scihubButton');
     const libgenButton = document.getElementById('libgenButton');
     const doi2bibButton = document.getElementById('doi2bibButton');
@@ -550,12 +563,92 @@ document.addEventListener('DOMContentLoaded', function() {
     clearSearchButton.addEventListener('click', function() { searchTitle.value = ''; searchAuthor.value = ''; searchYear.value = ''; searchResults.innerHTML = ''; });
     clearBatchButton.addEventListener('click', function() { batchDoiInput.value = ''; batchResults.innerHTML = ''; batchProgress.style.display = 'none'; });
 
-    // APS / Sci-Hub / LibGen
-    apsButton.addEventListener('click', function() {
-        if (!doiInput.value.trim()) { alert('请输入DOI'); return; }
-        const url = 'https://harvest.aps.org/v2/journals/articles/' + doiInput.value.trim() + '/fulltext';
+    // ==================== APS 官网 PDF 直链 ====================
+    // 为什么不用 harvest: harvest API 自 2025 起对非 OA 文章一律 401/403（仅 OA 可用），
+    // 改用 APS 官网直链 journals.aps.org/<slug>/pdf/<DOI> —— 走机构订阅 IP，免 cookie。
+    // 两个坑: (1) 路径 DOI 大小写敏感；(2) slug 必须与期刊对应。
+    const APS_PREFIX = {            // DOI 后缀前缀(小写) -> [规范前缀, slug]
+        'physrevlett':       ['PhysRevLett',       'prl'],
+        'physreva':          ['PhysRevA',          'pra'],
+        'physrevb':          ['PhysRevB',          'prb'],
+        'physrevc':          ['PhysRevC',          'prc'],
+        'physrevd':          ['PhysRevD',          'prd'],
+        'physreve':          ['PhysRevE',          'pre'],
+        'physrevx':          ['PhysRevX',          'prx'],
+        'physrevresearch':   ['PhysRevResearch',   'prresearch'],
+        'revmodphys':        ['RevModPhys',        'rmp'],
+        'physrevaccelbeams': ['PhysRevAccelBeams', 'prab'],
+        'physrevstab':       ['PhysRevSTAB',       'prab'],       // PRST-AB 已并入 PRAB
+        'physrevapplied':    ['PhysRevApplied',    'prapplied'],
+        'physrevfluids':     ['PhysRevFluids',     'prfluids'],
+        'physrevmaterials':  ['PhysRevMaterials',  'prmaterials'],
+        'prxquantum':        ['PRXQuantum',        'prxquantum'],
+        'physrevphyseducres':['PhysRevPhysEducRes','prper'],
+        'physrevstper':      ['PhysRevSTPER',      'prper'],      // PRST-PER 已并入 PRPER
+        'physrev':           ['PhysRev',           'pr']          // 1970 年前的 Physical Review
+    };
+    const APS_JOURNAL = {           // CrossRef 刊名(小写) -> slug，用于识别不了前缀的 DOI
+        'physical review letters': 'prl', 'physical review a': 'pra', 'physical review b': 'prb',
+        'physical review c': 'prc', 'physical review d': 'prd', 'physical review e': 'pre',
+        'physical review x': 'prx', 'physical review research': 'prresearch',
+        'reviews of modern physics': 'rmp', 'physical review accelerators and beams': 'prab',
+        'physical review special topics - accelerators and beams': 'prab',
+        'physical review applied': 'prapplied', 'physical review fluids': 'prfluids',
+        'physical review materials': 'prmaterials', 'prx quantum': 'prxquantum',
+        'physical review physics education research': 'prper',
+        'physical review special topics - physics education research': 'prper',
+        'physical review': 'pr'
+    };
+    function cleanDoi(raw) {
+        return (raw || '').trim().replace(/^(https?:\/\/(dx\.)?doi\.org\/|doi:\s*)/i, '');
+    }
+    function apsPdf(doi, slug) { return 'https://journals.aps.org/' + slug + '/pdf/' + doi; }
+    function apsPdfFast(doi) {      // 离线可判定的情况，直接拼链接；否则返回 null 走 CrossRef
+        if (!/^10\.1103\//i.test(doi)) return null;
+        const sfx = doi.slice(8), i = sfx.indexOf('.');
+        if (i < 0) return null;                                    // 2025 后新式 DOI，后缀无刊名
+        const p = APS_PREFIX[sfx.slice(0, i).toLowerCase()];
+        if (!p) return null;
+        const tail = sfx.slice(i + 1);
+        if (/[a-z]/i.test(tail)) return null;                      // 后缀含字母，大小写无法离线确定
+        return apsPdf('10.1103/' + p[0] + '.' + tail, p[1]);
+    }
+    async function resolveApsPdf(raw) {
+        const doi = cleanDoi(raw);
+        if (!doi) return { error: '请输入DOI' };
+        if (!/^10\.1103\//i.test(doi)) return { error: '不是 APS DOI（应以 10.1103/ 开头）' };
+        const fast = apsPdfFast(doi);
+        if (fast) return { url: fast };
+        try {   // CrossRef 给规范大小写 DOI 和刊名（CORS 开放，实测可用）
+            const r = await fetch('https://api.crossref.org/works/' + encodeURIComponent(doi));
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const m = (await r.json()).message;
+            const canon = ((((m.resource || {}).primary || {}).URL) || '').split('/doi/')[1] || m.DOI;
+            const slug = APS_JOURNAL[(((m['container-title'] || [])[0]) || '').toLowerCase()];
+            if (canon && slug) return { url: apsPdf(canon, slug) };
+            return { fallback: 'https://doi.org/' + doi, note: '未识别到 APS 期刊，已打开 DOI 落地页（在页面上点 PDF）' };
+        } catch (e) {
+            return { fallback: 'https://doi.org/' + doi, note: '解析失败，已打开 DOI 落地页（在页面上点 PDF）' };
+        }
+    }
+    apsButton.addEventListener('click', async function() {
+        const res = await resolveApsPdf(doiInput.value);
+        if (res.error) { alert(res.error + '\n例如：10.1103/PhysRevC.111.034320'); return; }
+        const url = res.url || res.fallback;
+        generatedUrl.textContent = res.note ? res.note + '\n' + url : url;
+        resultSection.style.display = 'block';
+        window.open(url, '_blank');
+    });
+
+    // APS Harvest 接口（原样保留；仅 OA 文章可用，非 OA 返回 401 not authorized / 403）
+    apsHarvestButton.addEventListener('click', function() {
+        const doi = cleanDoi(doiInput.value);
+        if (!doi) { alert('请输入DOI'); return; }
+        const url = 'https://harvest.aps.org/v2/journals/articles/' + doi + '/fulltext';
         generatedUrl.textContent = url; resultSection.style.display = 'block'; window.open(url, '_blank');
     });
+
+    // Sci-Hub / LibGen
     scihubButton.addEventListener('click', async function() {
         const doi = doiInput.value.trim();
         if (!doi) { alert('请输入DOI'); return; }
@@ -746,61 +839,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (text) copy(text, this);
     });
 
-    // ==================== Three.js ====================
-    const c = document.getElementById('three-container');
-    const sc = new THREE.Scene();
-    const cam = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 2000);
-    cam.position.z = 300;
-    const ren = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    ren.setSize(window.innerWidth, window.innerHeight);
-    ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    c.appendChild(ren.domElement);
-
-    const N = 2000;
-    const g = new THREE.BufferGeometry();
-    const pos = new Float32Array(N*3), col = new Float32Array(N*3);
-    for (let i = 0; i < N; i++) {
-        const r = 50 + Math.random() * 350, th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
-        pos[i*3] = r * Math.sin(ph) * Math.cos(th);
-        pos[i*3+1] = r * Math.sin(ph) * Math.sin(th) * 0.4;
-        pos[i*3+2] = r * Math.cos(ph);
-        const t = Math.random();
-        col[i*3] = 0.3 + t*0.4; col[i*3+1] = 0.4 + (1-t)*0.4; col[i*3+2] = 0.8 + t*0.2;
-    }
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    const stars = new THREE.Points(g, new THREE.PointsMaterial({ size: 2.5, sizeAttenuation: true, transparent: true, opacity: 0.8, vertexColors: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-    sc.add(stars);
-
-    function makeRing(r, y, color, n, sz) {
-        const gg = new THREE.BufferGeometry(); const pp = new Float32Array(n*3);
-        for (let i = 0; i < n; i++) { const a = (i/n)*Math.PI*2; pp[i*3]=Math.cos(a)*r; pp[i*3+1]=y+(Math.random()-0.5)*2; pp[i*3+2]=Math.sin(a)*r; }
-        gg.setAttribute('position', new THREE.BufferAttribute(pp, 3));
-        return new THREE.Points(gg, new THREE.PointsMaterial({ size: sz, color: color, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
-    }
-    const o1 = makeRing(120, -20, 0x4a9eff, 80, 2.0);
-    const o2 = makeRing(160, 10, 0x8e44ad, 60, 1.5);
-    const o3 = makeRing(90, 30, 0x2ecc71, 50, 1.2);
-    const o4 = makeRing(200, -40, 0xe74c3c, 40, 1.0);
-    sc.add(o1); sc.add(o2); sc.add(o3); sc.add(o4);
-
-    let mx = 0, my = 0;
-    document.addEventListener('mousemove', e => { mx = (e.clientX/window.innerWidth)*2-1; my = -(e.clientY/window.innerHeight)*2+1; });
-    window.addEventListener('resize', () => { cam.aspect = window.innerWidth/window.innerHeight; cam.updateProjectionMatrix(); ren.setSize(window.innerWidth, window.innerHeight); });
-
-    function anim() {
-        requestAnimationFrame(anim);
-        stars.rotation.y += 0.0003; stars.rotation.x += 0.0001;
-        o1.rotation.y += 0.008; o1.rotation.x += 0.002;
-        o2.rotation.y -= 0.005; o2.rotation.z += 0.003;
-        o3.rotation.y += 0.01; o3.rotation.x += 0.004;
-        o4.rotation.y -= 0.003; o4.rotation.z += 0.002;
-        cam.position.x += (mx*50 - cam.position.x) * 0.02;
-        cam.position.y += (my*30 - cam.position.y) * 0.02;
-        cam.lookAt(sc.position);
-        ren.render(sc, cam);
-    }
-    anim();
+    // ==================== 背景特效 ====================
+    // 已由 Three.js 星空换成 DeepSeek Harness 同款两层背景（WebGL2 流体 + 2D 网格），
+    // 实现在页面末尾的独立 <script> 块中（layer 1 fluid / layer 2 grid）。
 
     // ==================== 深色模式 ====================
     const tt = document.getElementById('themeToggle');
@@ -811,6 +852,581 @@ document.addEventListener('DOMContentLoaded', function() {
         tt.textContent = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
     });
 });
+</script>
+<script>
+/* ================================================================
+ * 页面背景：DeepSeek Harness 同款两层特效（原样搬自 deepseek_harness/index.html）
+ *   layer 1  #fluid : WebGL2 flowmap + 域噪声流体（深蓝金色流动，鼠标可"涂抹"）
+ *   layer 2  #grid  : 90px 2D 粒子网格（鼠标排斥 + 弹簧回位）
+ * 参数均为官网实测值，勿随手改；?demo=1 鼠标自动游走，?forceGrid=1 强制显示网格（触摸/无头环境调试用）
+ * ================================================================ */
+/* ================================================================
+ * 层 1：WebGL2 流体背景（还原自 deepseek.com/harness page.js）
+ * 原理：低分辨率 flowmap ping-pong 纹理，R 通道存"影响力"，
+ *       GB 通道存速度方向（0.5 为中心）；鼠标在其上"涂抹"，
+ *       每帧按 u_decay 衰减。最终由域噪声（fbm+snoise）流体
+ *       shader 渲染出深蓝金色流动效果，叠加 bloom / 虚光 / 光源。
+ * ================================================================ */
+(function () {
+  const canvas = document.getElementById('fluid');
+  const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: false, powerPreference: 'low-power' });
+  if (!gl) { console.error('需要 WebGL2'); return; }
+
+  /* ---- 官网实际参数 ---- */
+  const params = {
+    type: 'fluid',
+    mouseRadius: .09, mouseStrength: 1.8, mouseSmoothing: .1, mouseVelocity: .2,
+    decay: .925, distortBoost: 2.2, noiseBoost: .3, swirlBoost: .8,
+    glowIntensity: .13, glowColors: ['#fff7d1', '#538dca', '#2d448b'],
+    speed: 28, distortion: 18, swirl: 20, swirlIterations: 12,
+    scale: 1.77, rotation: 15, proportion: 60, softness: 80, shapeScale: 0,
+    offsetX: -124, offsetY: -48, grain: .005,
+    colors: ['#000000', '#1A3870', '#204a7e', '#eed8aa', '#000000'],
+    lightX: .89, lightY: .46, lightCore: .14, lightHalo: .2, vignette: .38,
+    lightFollow: .63, bloomThreshold: .61, bloomRange: .18, bloomStrength: .4
+  };
+
+  const hex2rgb = h => {
+    const s = h.replace('#', '');
+    return [parseInt(s.slice(0,2),16)/255, parseInt(s.slice(2,4),16)/255, parseInt(s.slice(4,6),16)/255];
+  };
+
+  /* ---- shader 编译 ---- */
+  const VERT = `#version 300 es
+  in vec4 a_position;
+  out vec2 vUv;
+  void main() {
+    vUv = a_position.xy * 0.5 + 0.5;
+    gl_Position = a_position;
+  }`;
+
+  /* Pass A：flowmap 更新（在 1/4 低分辨率上做） */
+  const FLOW_FRAG = `#version 300 es
+  precision mediump float;
+  in vec2 vUv;
+  uniform sampler2D u_prev;
+  uniform vec2 u_mouse;
+  uniform vec2 u_velocity;
+  uniform float u_brushRadius;
+  uniform float u_brushStrength;
+  uniform float u_decay;
+  out vec4 fragColor;
+
+  void main() {
+    vec4 prev = texture(u_prev, vUv);
+
+    prev.r *= u_decay;
+    prev.gb = mix(vec2(0.5), prev.gb, u_decay);
+
+    float dist = distance(vUv, u_mouse);
+
+    float influence = exp(-dist * dist / (u_brushRadius * u_brushRadius * 0.5));
+    influence = max(0.0, influence - 0.01);
+
+    float speed = length(u_velocity);
+    float presenceStrength = u_brushStrength * 0.3;
+    float velBonus = min(speed * 3.0, 0.7) * u_brushStrength;
+    float totalStrength = presenceStrength + velBonus;
+
+    prev.r = max(prev.r, influence * totalStrength);
+    float blendAmt = influence * min(totalStrength, 0.4) * 0.3;
+    prev.g = mix(prev.g, clamp(u_velocity.x * 2.0 + 0.5, 0.0, 1.0), blendAmt);
+    prev.b = mix(prev.b, clamp(u_velocity.y * 2.0 + 0.5, 0.0, 1.0), blendAmt);
+
+    fragColor = prev;
+  }`;
+
+  /* Pass B：域噪声流体渲染（全分辨率） */
+  const FLUID_FRAG = `#version 300 es
+  precision mediump float;
+  in vec2 vUv;
+  uniform float u_time;
+  uniform vec2 u_resolution;
+  uniform vec3 u_c1, u_c2, u_c3, u_c4, u_c5;
+  uniform float u_scale;
+  uniform vec2 u_offset;
+  uniform float u_grain;
+  uniform float u_speed;
+  uniform sampler2D u_flowmap;
+  uniform float u_distortBoost;
+  uniform float u_swirlBoost;
+  uniform float u_glowIntensity;
+  uniform vec3 u_glowColor1;
+  uniform vec3 u_glowColor2;
+  uniform vec3 u_glowColor3;
+  uniform vec2 u_lightPos;
+  uniform float u_lightCore;
+  uniform float u_lightHalo;
+  uniform float u_vignette;
+  uniform float u_bloomThreshold;
+  uniform float u_bloomRange;
+  uniform float u_bloomStrength;
+  out vec4 fragColor;
+
+  vec3 mod289v3(vec3 x){return x-floor(x*(1./289.))*289.;}
+  vec4 mod289v4(vec4 x){return x-floor(x*(1./289.))*289.;}
+  vec4 permute(vec4 x){return mod289v4(((x*34.)+1.)*x);}
+  vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-.85373472095314*r;}
+
+  float snoise(vec3 v){
+    const vec2 C=vec2(1./6.,1./3.);
+    const vec4 D=vec4(0.,.5,1.,2.);
+    vec3 i=floor(v+dot(v,C.yyy));
+    vec3 x0=v-i+dot(i,C.xxx);
+    vec3 g=step(x0.yzx,x0.xyz);
+    vec3 l=1.-g;
+    vec3 i1=min(g.xyz,l.zxy);
+    vec3 i2=max(g.xyz,l.zxy);
+    vec3 x1=x0-i1+C.xxx;
+    vec3 x2=x0-i2+C.yyy;
+    vec3 x3=x0-D.yyy;
+    i=mod289v3(i);
+    vec4 p=permute(permute(permute(i.z+vec4(0.,i1.z,i2.z,1.))+i.y+vec4(0.,i1.y,i2.y,1.))+i.x+vec4(0.,i1.x,i2.x,1.));
+    float n_=.142857142857;
+    vec3 ns=n_*D.wyz-D.xzx;
+    vec4 j=p-49.*floor(p*ns.z*ns.z);
+    vec4 x_=floor(j*ns.z);
+    vec4 y_=floor(j-7.*x_);
+    vec4 x=x_*ns.x+ns.yyyy;
+    vec4 y=y_*ns.x+ns.yyyy;
+    vec4 h=1.-abs(x)-abs(y);
+    vec4 b0=vec4(x.xy,y.xy);
+    vec4 b1=vec4(x.zw,y.zw);
+    vec4 s0=floor(b0)*2.+1.;
+    vec4 s1=floor(b1)*2.+1.;
+    vec4 sh=-step(h,vec4(0.));
+    vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy;
+    vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+    vec3 p0=vec3(a0.xy,h.x);vec3 p1=vec3(a0.zw,h.y);
+    vec3 p2=vec3(a1.xy,h.z);vec3 p3=vec3(a1.zw,h.w);
+    vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+    p0*=norm.x;p1*=norm.y;p2*=norm.z;p3*=norm.w;
+    vec4 m=max(.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.);
+    m=m*m;
+    return 42.*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+  }
+
+  float hash(vec2 p){
+    vec3 p3=fract(vec3(p.xyx)*.1031);
+    p3+=dot(p3,p3.yzx+33.33);
+    return fract((p3.x+p3.y)*p3.z);
+  }
+
+  float fbm(vec3 p){
+    float v=0.,amp=.6;vec3 shift=vec3(100.);
+    for(int i=0;i<1;i++){v+=amp*snoise(p);p=p*2.+shift;amp*=.4;}
+    return v;
+  }
+
+  float fluidNoise(vec2 uv,float t){
+    float n1=fbm(vec3(uv*.6,t*.06));
+    float n2=fbm(vec3(uv*.6+5.2,t*.06+1.3));
+    vec2 w1=vec2(n1,n2)*.6;
+    float n3=fbm(vec3((uv+w1)*.7+1.7,t*.05+3.1));
+    float n4=fbm(vec3((uv+w1)*.7+9.2,t*.05+5.7));
+    vec2 w2=vec2(n3,n4)*.5;
+    return fbm(vec3((uv+w1+w2)*.5,t*.04));
+  }
+
+  vec2 curlish(vec2 uv,float t){
+    float eps=.02;
+    float n=snoise(vec3(uv*.8,t));
+    float nx=snoise(vec3((uv+vec2(eps,0.))*.8,t));
+    float ny=snoise(vec3((uv+vec2(0.,eps))*.8,t));
+    return vec2(-(ny-n)/eps,(nx-n)/eps)*.003;
+  }
+
+  void main(){
+    float aspect=u_resolution.x/u_resolution.y;
+    vec2 uv=gl_FragCoord.xy/u_resolution;
+    vec2 suv=vec2(uv.x*aspect, uv.y) * u_scale + u_offset;
+    float t=u_time;
+
+    // Mouse interaction via flowmap
+    vec4 flow = texture(u_flowmap, uv);
+    float influence = flow.r;
+    vec2 flowDir = (flow.gb - 0.5) * 2.0;
+
+    // Apply mouse distortion to UV
+    suv += flowDir * influence * u_distortBoost * 0.8;
+    // Apply mouse swirl
+    float swirlAngle = influence * u_swirlBoost * 2.5;
+    float cs = cos(swirlAngle), sn = sin(swirlAngle);
+    vec2 delta = suv - vec2(uv.x * aspect, uv.y) * u_scale;
+    suv += (mat2(cs, sn, -sn, cs) * delta - delta) * influence;
+
+    vec2 curl=curlish(suv,t*.04);
+    vec2 uvD=suv+curl*12.;
+    float f=fluidNoise(uvD,t);
+    float swirl=snoise(vec3(uvD*.8+f*1.5,t*.035))*.5+.5;
+    float n=f*.5+.5;
+    vec3 col=mix(u_c1,u_c2,smoothstep(.2,.5,n));
+    col=mix(col,u_c3,smoothstep(.35,.65,n+swirl*.25));
+    col=mix(col,u_c4,smoothstep(.6,.85,swirl)*.55);
+    col=mix(col,u_c5,smoothstep(.5,.8,n*swirl)*.35);
+
+    // Mouse proximity color shift: 3-color glow blended by distance + noise
+    float glow = smoothstep(0.0, 0.8, influence);
+    float glowNoise = snoise(vec3(uvD * 1.5, t * 0.08)) * 0.5 + 0.5;
+    float glowDist = smoothstep(0.0, 1.0, influence);
+    vec3 glowMix = mix(u_glowColor3, u_glowColor2, glowDist);
+    glowMix = mix(glowMix, u_glowColor1, glowDist * glowNoise);
+    col = mix(col, glowMix, glow * u_glowIntensity);
+
+    if(u_grain>0.0){
+      vec2 flowOffset = (uvD - suv) * u_resolution.y;
+      vec2 gp = floor((gl_FragCoord.xy + flowOffset) / 5.0);
+      float gr=hash(gp)*2.-1.;
+      col+=gr*u_grain;
+    }
+
+    // Self-luminance bloom: bright fluid regions become their own light spots
+    float luma=dot(col,vec3(.299,.587,.114));
+    float bloom=smoothstep(u_bloomThreshold-u_bloomRange,u_bloomThreshold+u_bloomRange,luma);
+    col+=(col*.85+vec3(.15,.145,.13))*bloom*u_bloomStrength;
+
+    // Virtual light source: soft warm core (same side as helm lighting)
+    float ld=length((uv-u_lightPos)*vec2(aspect,1.));
+    float core=exp(-ld*ld*4.5);
+    float halo=exp(-ld*1.8);
+    col+=vec3(1.,.97,.9)*core*u_lightCore+vec3(.72,.8,1.)*halo*u_lightHalo;
+
+    float vig=1.-smoothstep(.35,.75,length(uv-.5));
+    col=mix(col*(1.-u_vignette),col,vig);
+    fragColor=vec4(col,1.);
+  }`;
+
+  const compile = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.error('Shader:', gl.getShaderInfoLog(s));
+      return null;
+    }
+    return s;
+  };
+  const program = (fragSrc) => {
+    const vs = compile(gl.VERTEX_SHADER, VERT);
+    const fs = compile(gl.FRAGMENT_SHADER, fragSrc);
+    if (!fs) return null;
+    const p = gl.createProgram();
+    gl.attachShader(p, vs);
+    gl.attachShader(p, fs);
+    gl.linkProgram(p);
+    return gl.getProgramParameter(p, gl.LINK_STATUS) ? p : (console.error('Link:', gl.getProgramInfoLog(p)), null);
+  };
+
+  const progFlow = program(FLOW_FRAG);
+  const progFluid = program(FLUID_FRAG);
+  if (!progFlow || !progFluid) return;
+
+  const loc = (p, names) => {
+    const o = {};
+    for (const n of names) o[n] = gl.getUniformLocation(p, n);
+    return o;
+  };
+  const Uf = loc(progFlow, ['u_prev','u_mouse','u_velocity','u_brushRadius','u_brushStrength','u_decay']);
+  const UD = loc(progFluid, ['u_time','u_resolution','u_scale','u_offset','u_grain','u_flowmap','u_distortBoost','u_swirlBoost','u_glowIntensity','u_glowColor1','u_glowColor2','u_glowColor3','u_lightPos','u_lightCore','u_lightHalo','u_vignette','u_bloomThreshold','u_bloomRange','u_bloomStrength','u_c1','u_c2','u_c3','u_c4','u_c5']);
+
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const bindQuad = p => {
+    const a = gl.getAttribLocation(p, 'a_position');
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.enableVertexAttribArray(a);
+    gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+  };
+
+  /* ---- 低分辨率 flowmap 纹理对（ping-pong） ---- */
+  const makeTarget = (w, h, data) => {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { fbo, tex };
+  };
+
+  /* ---- 状态 ---- */
+  let W = 0, H = 0, FW = 0, FH = 0;
+  let texA, texB, flip = false;
+  const mouse = { x: .5, y: .5, sx: .5, sy: .5, vx: 0, vy: 0 };
+  const dprCap = Math.min(window.devicePixelRatio || 1, 1.5);
+  const init = () => {
+    W = Math.round(canvas.clientWidth * dprCap);
+    H = Math.round(canvas.clientHeight * dprCap);
+    canvas.width = W; canvas.height = H;
+    FW = Math.round(W / 4); FH = Math.round(H / 4);
+    // 初始 flowmap：R=0（无影响），GB=0.5（零速度）
+    const N = new Uint8Array(FW * FH * 4);
+    for (let i = 0; i < FW * FH; i++) { N[4*i] = 0; N[4*i+1] = 128; N[4*i+2] = 128; N[4*i+3] = 255; }
+    texA = makeTarget(FW, FH, N);
+    texB = makeTarget(FW, FH, N);
+  };
+  init();
+
+  const onMove = e => {
+    const r = canvas.getBoundingClientRect();
+    mouse.x = (e.clientX - r.left) / r.width;
+    mouse.y = 1 - (e.clientY - r.top) / r.height;
+  };
+  window.addEventListener('mousemove', onMove);
+
+  // 演示模式：?demo=1 时鼠标自动游走（无需真实鼠标即可看到流动效果）
+  const demoMode = new URLSearchParams(location.search).get('demo') === '1';
+  if (demoMode) {
+    const demoStart = performance.now();
+    setInterval(() => {
+      const t = (performance.now() - demoStart) * .001;
+      const r = canvas.getBoundingClientRect();
+      mouse.x = .5 + .38 * Math.sin(t * .6) * Math.cos(t * .23);
+      mouse.y = .5 + .38 * Math.cos(t * .5) * Math.sin(t * .31);
+      canvas.dispatchEvent(new MouseEvent('mousemove', {
+        clientX: r.left + mouse.x * r.width,
+        clientY: r.top + (1 - mouse.y) * r.height,
+        bubbles: true
+      }));
+    }, 100);
+  }
+
+  const start = performance.now();
+  let last = 0;
+  const FRAME = 1000 / 30;
+
+  const render = now => {
+    requestAnimationFrame(render);
+    const dt = now - last;
+    if (dt < FRAME) return;
+    last = now - (dt % FRAME);
+
+    const W2 = Math.round(canvas.clientWidth * dprCap);
+    const H2 = Math.round(canvas.clientHeight * dprCap);
+    if (W2 !== W || H2 !== H) { W = W2; H = H2; canvas.width = W; canvas.height = H; }
+
+    // 鼠标平滑（官网公式）
+    mouse.sx += (mouse.x - mouse.sx) * params.mouseSmoothing;
+    mouse.sy += (mouse.y - mouse.sy) * params.mouseSmoothing;
+    mouse.vx += ((mouse.x - mouse.sx) * .5 - mouse.vx) * params.mouseVelocity;
+    mouse.vy += ((mouse.y - mouse.sy) * .5 - mouse.vy) * params.mouseVelocity;
+
+    const read = flip ? texA : texB;
+    const write = flip ? texB : texA;
+    flip = !flip;
+
+    /* Pass A：更新 flowmap（低分辨率） */
+    gl.bindFramebuffer(gl.FRAMEBUFFER, write.fbo);
+    gl.viewport(0, 0, FW, FH);
+    gl.useProgram(progFlow);
+    bindQuad(progFlow);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, read.tex);
+    gl.uniform1i(Uf.u_prev, 0);
+    gl.uniform2f(Uf.u_mouse, mouse.sx, mouse.sy);
+    gl.uniform2f(Uf.u_velocity, mouse.vx, mouse.vy);
+    gl.uniform1f(Uf.u_brushRadius, params.mouseRadius);
+    gl.uniform1f(Uf.u_brushStrength, params.mouseStrength);
+    gl.uniform1f(Uf.u_decay, params.decay);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    /* Pass B：流体渲染（全分辨率） */
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, W, H);
+    gl.useProgram(progFluid);
+    bindQuad(progFluid);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, write.tex);
+    gl.uniform1i(UD.u_flowmap, 0);
+    gl.uniform1f(UD.u_time, (now - start) * .001 * (params.speed / 100));
+    gl.uniform2f(UD.u_resolution, W, H);
+    gl.uniform1f(UD.u_scale, params.scale);
+    gl.uniform2f(UD.u_offset, params.offsetX / 100, params.offsetY / 100);
+    gl.uniform1f(UD.u_grain, params.grain);
+    gl.uniform1f(UD.u_distortBoost, params.distortBoost);
+    gl.uniform1f(UD.u_swirlBoost, params.swirlBoost);
+
+    // 虚拟光源位置：跟随鼠标（lightFollow 权重）
+    const lx = params.lightX + (mouse.sx - params.lightX) * params.lightFollow;
+    gl.uniform2f(UD.u_lightPos, lx, params.lightY);
+    gl.uniform1f(UD.u_lightCore, params.lightCore);
+    gl.uniform1f(UD.u_lightHalo, params.lightHalo);
+    gl.uniform1f(UD.u_vignette, params.vignette);
+    gl.uniform1f(UD.u_bloomThreshold, params.bloomThreshold);
+    gl.uniform1f(UD.u_bloomRange, params.bloomRange);
+    gl.uniform1f(UD.u_bloomStrength, params.bloomStrength);
+    gl.uniform1f(UD.u_glowIntensity, params.glowIntensity);
+
+    const gc = params.glowColors.map(hex2rgb);
+    gl.uniform3f(UD.u_glowColor1, gc[0][0], gc[0][1], gc[0][2]);
+    gl.uniform3f(UD.u_glowColor2, gc[1][0], gc[1][1], gc[1][2]);
+    gl.uniform3f(UD.u_glowColor3, gc[2][0], gc[2][1], gc[2][2]);
+
+    const cols = params.colors.map(hex2rgb);
+    const cl = [UD.u_c1, UD.u_c2, UD.u_c3, UD.u_c4, UD.u_c5];
+    for (let i = 0; i < 5; i++) gl.uniform3f(cl[i], cols[i][0], cols[i][1], cols[i][2]);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  };
+  requestAnimationFrame(render);
+})();
+
+/* ================================================================
+ * 层 2：2D 粒子网格（还原自官网 grid 组件）
+ * 原理：90px 间距网格点，鼠标 140px 半径内被排斥，
+ *       弹簧力拉回原位 + 阻尼，相邻点距离 <20px 才连线。
+ * ================================================================ */
+(function () {
+  const canvas = document.getElementById('grid');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  // ?forceGrid=1 可强制启用网格（headless/触摸设备默认会跳过，用于调试）
+  const forceGrid = new URLSearchParams(location.search).get('forceGrid') === '1';
+  if (window.matchMedia('(hover: none), (pointer: coarse)').matches && !forceGrid) return; // 触摸设备跳过
+
+  const lineColor = 'rgba(255, 255, 255,'; // 官网 z-5 层实际为白色
+  const dotColor  = 'rgba(255, 255, 255,';
+  const lineOpacity = .08;
+  const dotOpacity  = .16;
+  const isStatic = false;
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let pts = [], cols = 0, rows = 0, cw = 0, ch = 0;
+  let raf = 0, paused = false;
+
+  const build = () => {
+    cols = Math.ceil(cw / 90) + 1;
+    rows = Math.ceil(ch / 90) + 1;
+    const ox = (cw - (cols - 1) * 90) / 2;
+    const oy = (ch - (rows - 1) * 90) / 2;
+    pts = [];
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        pts.push({ restX: ox + 90 * c, restY: oy + 90 * r, x: ox + 90 * c, y: oy + 90 * r, vx: 0, vy: 0 });
+  };
+
+  const m = { x: NaN, y: NaN };
+  let resizeTimer = null;
+  let last = 0;
+  const STEP = 1000 / 30;
+
+  const resize = () => {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (w === 0 || h === 0) return; // 布局未就绪，等下一帧
+    if (w === cw && h === ch && pts.length > 0) return;
+    cw = w; ch = h;
+    canvas.width = cw * dpr; canvas.height = ch * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (pts.length === 0) {
+      build(); // 首次初始化：立即建网格（不能被每帧 rAF 重置的定时器饿死）
+    } else {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(build, 150); // 窗口 resize：防抖重建
+    }
+  };
+  resize();
+
+  const onMove = e => {
+    if (isStatic) return;
+    const r = canvas.getBoundingClientRect();
+    m.x = e.clientX - r.left; m.y = e.clientY - r.top;
+    requestFrame();
+  };
+  window.addEventListener('mousemove', onMove);
+
+  const requestFrame = () => { paused = false; cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); };
+
+  function frame(now) {
+    if (!document.getElementById('grid').isConnected) return;
+    if (now - last < STEP) { raf = requestAnimationFrame(frame); return; }
+    last = now - (now - last) % STEP;
+
+    resize(); // 每帧检查尺寸（含暂停恢复路径）
+    if (pts.length === 0) { raf = requestAnimationFrame(frame); return; }
+    ctx.clearRect(0, 0, cw, ch);
+
+    const mx = m.x, my = m.y;
+    let maxSpeed = 0;
+
+    // 物理更新：鼠标排斥 + 弹簧回位 + 阻尼
+    for (const p of pts) {
+      const dx = p.x - mx, dy = p.y - my;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 140 && d > .1) {
+        const f = (1 - d / 140) * 30;
+        p.vx += (dx / d) * f * .1;
+        p.vy += (dy / d) * f * .1;
+      }
+      p.vx += .05 * (p.restX - p.x);
+      p.vy += .05 * (p.restY - p.y);
+      p.vx *= .85; p.vy *= .85;
+      p.x += p.vx; p.y += p.vy;
+      maxSpeed = Math.max(maxSpeed, Math.abs(p.vx) + Math.abs(p.vy));
+    }
+
+    // 水平连线
+    ctx.strokeStyle = lineColor + lineOpacity + ')';
+    ctx.lineWidth = .5;
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols - 1; c++) {
+        const a = pts[r * cols + c], b = pts[r * cols + c + 1];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 20) continue;
+        const ux = dx / d, uy = dy / d;
+        ctx.beginPath();
+        ctx.moveTo(a.x + 10 * ux, a.y + 10 * uy);
+        ctx.lineTo(b.x - 10 * ux, b.y - 10 * uy);
+        ctx.stroke();
+      }
+    // 垂直连线
+    for (let c = 0; c < cols; c++)
+      for (let r = 0; r < rows - 1; r++) {
+        const a = pts[r * cols + c], b = pts[(r + 1) * cols + c];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 20) continue;
+        const ux = dx / d, uy = dy / d;
+        ctx.beginPath();
+        ctx.moveTo(a.x + 10 * ux, a.y + 10 * uy);
+        ctx.lineTo(b.x - 10 * ux, b.y - 10 * uy);
+        ctx.stroke();
+      }
+
+    // 点：靠近鼠标变大变亮
+    for (const p of pts) {
+      let r = 1.8, a = dotOpacity;
+      if (!isNaN(mx) && !isNaN(my)) {
+        const d = Math.sqrt((p.x - mx) ** 2 + (p.y - my) ** 2);
+        const t = Math.max(0, 1 - d / 140);
+        r = 1.8 + 2 * t;
+        a = dotOpacity + .4 * t;
+      }
+      ctx.globalAlpha = a;
+      ctx.fillRect(p.x - r, p.y - r, 2 * r, 2 * r);
+    }
+    ctx.globalAlpha = 1;
+
+    if (maxSpeed < .01) {
+      // 静止：保留低频 rAF 仅做尺寸检查（避免窗口变化后网格错位）
+      paused = true;
+      raf = setTimeout(() => {
+        resize();
+        if (cw !== canvas.clientWidth || ch !== canvas.clientHeight) requestFrame();
+        else requestAnimationFrame(frame);
+      }, 500);
+      return;
+    }
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+})();
 </script>
 </body>
 </html>
