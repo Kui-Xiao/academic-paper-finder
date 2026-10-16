@@ -3,18 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>学术文献获取工具 - InspireHEP, APS, Sci-Hub & LibGen</title>
+    <title>学术文献工作台 - BibTeX 与全文入口</title>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background: linear-gradient(135deg, #f5f7fa 0%, #e4e9f2 100%); color: #333; line-height: 1.6; padding: 20px; min-height: 100vh; transition: background 0.5s, color 0.5s; }
         body.dark-mode { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #e0e0e0; }
-        /* 背景：DeepSeek Harness 同款两层特效（z-0 WebGL2 流体 + z-5 2D 网格）
-           固定深色，不随亮/暗主题变化（用户要求：不做亮暗适配） */
-        #bg-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; overflow: hidden; background: #05070f; }
-        #bg-container canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        #bg-container .bg-grid { position: absolute; inset: 0; z-index: 5;
-            -webkit-mask: linear-gradient(#000000fc 0%, #000000e8 8.98%, transparent 100%);
-                    mask: linear-gradient(#000000fc 0%, #000000e8 8.98%, transparent 100%); }
+        #three-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
         .container { max-width: 1000px; margin: 0 auto; background-color: rgba(255,255,255,0.92); border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); padding: 30px; position: relative; z-index: 1; backdrop-filter: blur(10px); transition: background-color 0.5s, box-shadow 0.5s; }
         body.dark-mode .container { background-color: rgba(26,26,46,0.92); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
         .theme-toggle { position: fixed; top: 20px; right: 20px; z-index: 10; background: rgba(255,255,255,0.8); border: none; border-radius: 50%; width: 44px; height: 44px; cursor: pointer; font-size: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.3s; display: flex; align-items: center; justify-content: center; }
@@ -42,9 +37,6 @@
         .input-with-button input[type="text"] { flex: 1; }
         #pasteButton { background-color: #9b59b6; color: white; border: none; border-radius: 6px; padding: 0 15px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background-color 0.3s; white-space: nowrap; }
         #pasteButton:hover { background-color: #8e44ad; }
-        #prefixButtons { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-        .prefix-button { background-color: #e1e8ed; border: 1px solid #d5dce0; border-radius: 4px; padding: 5px 10px; font-size: 13px; cursor: pointer; transition: all 0.3s; }
-        .prefix-button:hover { background-color: #d1d8dd; border-color: #3498db; }
         input[type="text"], textarea { width: 100%; padding: 12px 15px; border: 2px solid #e1e8ed; border-radius: 6px; font-size: 15px; transition: border-color 0.3s; }
         input[type="text"]:focus, textarea:focus { border-color: #3498db; outline: none; }
         textarea { resize: vertical; font-family: 'Consolas', 'Courier New', monospace; font-size: 14px; min-height: 120px; }
@@ -54,12 +46,16 @@
         button:disabled { opacity: 0.6; cursor: not-allowed; }
         #apsButton { background-color: #3498db; color: white; }
         #apsButton:hover:not(:disabled) { background-color: #2980b9; }
-        #apsHarvestButton { background-color: #5dade2; color: white; }
-        #apsHarvestButton:hover:not(:disabled) { background-color: #3fa4dd; }
+        #doiOrgButton { background-color: #16a085; color: white; }
+        #doiOrgButton:hover:not(:disabled) { background-color: #12876f; }
         #scihubButton { background-color: #9b59b6; color: white; }
         #scihubButton:hover:not(:disabled) { background-color: #8e44ad; }
         #libgenButton { background-color: #e67e22; color: white; }
         #libgenButton:hover:not(:disabled) { background-color: #d35400; }
+        #openAccessButton { background-color: #087f5b; color: white; }
+        #openAccessButton:hover:not(:disabled) { background-color: #06684a; }
+        #ableSciButton { background-color: #2563eb; color: white; }
+        #ableSciButton:hover:not(:disabled) { background-color: #1d4ed8; }
         #doi2bibButton { background-color: #2ecc71; color: white; }
         #doi2bibButton:hover:not(:disabled) { background-color: #27ae60; }
         #clearButton { background-color: #e74c3c; color: white; }
@@ -96,7 +92,7 @@
         .footer { margin-top: 30px; text-align: center; color: #7f8c8d; font-size: 14px; }
         /* DOI历史 */
         .doi-history { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; min-height: 26px; }
-        .doi-history .tag { background: #e8f4fd; color: #2980b9; font-size: 12px; padding: 2px 8px; border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid #d5e8f5; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+        .doi-history .tag { flex: 0 1 auto; min-width: 0; background: #e8f4fd; color: #2980b9; font-size: 12px; padding: 2px 8px; border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid #d5e8f5; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
         .doi-history .tag:hover { background: #d1ecf9; border-color: #3498db; }
         body.dark-mode .doi-history .tag { background: #1a2a4a; color: #5dade2; border-color: #2c3e50; }
         body.dark-mode .doi-history .tag:hover { background: #243b5e; }
@@ -119,8 +115,6 @@
         body.dark-mode .platform-card p { color: #95a5a6; }
         body.dark-mode label { color: #e0e0e0; }
         body.dark-mode input[type="text"], body.dark-mode textarea { background: #1e2a45; border-color: #2c3e50; color: #e0e0e0; }
-        body.dark-mode .prefix-button { background: #1e2a45; border-color: #2c3e50; color: #bdc3c7; }
-        body.dark-mode .prefix-button:hover { border-color: #5dade2; }
         body.dark-mode .result { background: #1e2a45; }
         body.dark-mode .result h3, body.dark-mode .result h4 { color: #e0e0e0; }
         body.dark-mode #generatedUrl { background: #0d1b2a; border-color: #2c3e50; color: #bdc3c7; }
@@ -131,56 +125,227 @@
         body.dark-mode .info-box strong { color: #e0e0e0; }
         body.dark-mode .batch-progress .status { color: #95a5a6; }
         body.dark-mode .batch-progress .bar { background: #2c3e50; }
+
+        /* v2: 以检索任务为中心的布局 */
+        :root {
+            --ink: #182230;
+            --muted: #667085;
+            --line: #dfe5ec;
+            --panel: rgba(255, 255, 255, 0.96);
+            --soft: #f6f8fb;
+            --brand: #2563eb;
+            --brand-dark: #1d4ed8;
+            --success: #087f5b;
+            --danger: #c92a2a;
+            --shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
+        }
+        body {
+            padding: 28px 20px 64px;
+            color: var(--ink);
+            background: radial-gradient(circle at 12% 8%, #dcecff 0, transparent 28%),
+                        radial-gradient(circle at 88% 18%, #eadfff 0, transparent 24%),
+                        #eef3f9;
+        }
+        body.dark-mode {
+            --ink: #eef2f7;
+            --muted: #a9b4c3;
+            --line: #334155;
+            --panel: rgba(16, 24, 39, 0.96);
+            --soft: #172033;
+            --brand: #60a5fa;
+            --brand-dark: #93c5fd;
+            --success: #34d399;
+            --danger: #f87171;
+            background: radial-gradient(circle at 12% 8%, #172554 0, transparent 30%),
+                        radial-gradient(circle at 88% 18%, #3b1c62 0, transparent 24%),
+                        #0b1120;
+        }
+        .container {
+            max-width: 1240px;
+            padding: 0;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,.7);
+            border-radius: 22px;
+            background: var(--panel);
+            box-shadow: var(--shadow);
+        }
+        body.dark-mode .container { background: var(--panel); border-color: rgba(255,255,255,.08); }
+        .app-header { padding: 38px 42px 24px; border-bottom: 1px solid var(--line); }
+        .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+        .eyebrow { color: var(--brand); font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+        h1 { margin: 6px 0 8px; text-align: left; color: var(--ink); font-size: clamp(28px, 4vw, 42px); line-height: 1.15; letter-spacing: -.03em; }
+        body.dark-mode h1 { color: var(--ink); }
+        .description { max-width: 720px; margin: 0; text-align: left; color: var(--muted); font-size: 15px; }
+        .header-tools { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+        .library-pill { min-width: 0; padding: 9px 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); color: var(--ink); font-size: 13px; }
+        .theme-toggle { position: static; width: 42px; height: 42px; min-width: 42px; padding: 0; background: var(--soft); border: 1px solid var(--line); box-shadow: none; }
+        body.dark-mode .theme-toggle { background: var(--soft); color: #facc15; }
+        .datetime { margin: 14px 0 0; text-align: left; color: var(--muted); }
+        .source-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+        .source-chip { padding: 5px 9px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+        .source-chip strong { color: var(--ink); }
+        .workspace { padding: 0 42px 38px; }
+        .tabs { gap: 22px; margin: 0 0 28px; overflow: visible; border-bottom-color: var(--line); }
+        .tab-btn { flex: 0 0 auto; min-width: 0; padding: 18px 2px 13px; color: var(--muted); }
+        .tab-btn.active { color: var(--brand); border-bottom-color: var(--brand); }
+        .tool-panel { padding: 26px; border: 1px solid var(--line); border-radius: 16px; background: var(--soft); }
+        .panel-heading { margin-bottom: 18px; }
+        .panel-heading h2 { color: var(--ink); font-size: 19px; line-height: 1.35; }
+        .panel-heading p { margin-top: 4px; color: var(--muted); font-size: 13px; }
+        label { color: var(--ink); }
+        input[type="text"], textarea {
+            border: 1px solid var(--line);
+            background: #fff;
+            color: #111827;
+            box-shadow: 0 1px 2px rgba(15,23,42,.04);
+        }
+        input[type="text"]:focus, textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(37,99,235,.13); }
+        body.dark-mode input[type="text"], body.dark-mode textarea { background: #0f172a; border-color: var(--line); color: var(--ink); }
+        .input-with-button { align-items: stretch; }
+        #pasteButton { flex: 0 0 auto; background: #7c3aed; }
+        .helper-row { margin-top: 12px; }
+        .history-wrap { display: flex; align-items: flex-start; gap: 10px; }
+        .history-label { flex: 0 0 auto; padding-top: 3px; color: var(--muted); font-size: 12px; font-weight: 700; }
+        .doi-history { flex: 1; }
+        .primary-actions { display: grid; grid-template-columns: minmax(180px, 1.4fr) minmax(180px, 1fr); gap: 12px; margin-bottom: 14px; }
+        .primary-actions button { min-height: 48px; }
+        #doiOrgButton { background: var(--brand); }
+        #doiOrgButton:hover:not(:disabled) { background: var(--brand-dark); }
+        #doi2bibButton { background: #0f766e; }
+        .more-actions { border-top: 1px solid var(--line); padding-top: 16px; }
+        .secondary-title { margin-bottom: 10px; color: var(--muted); font-size: 13px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+        .more-actions .button-group { margin: 0; }
+        .more-actions .button-group button { flex: 0 1 auto; padding: 9px 14px; font-size: 13px; }
+        #clearButton { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+        #clearButton:hover:not(:disabled) { background: #fff; color: var(--danger); }
+        .result { margin: 24px 0 0; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+        body.dark-mode .result { background: #0f172a; }
+        .result h3, .result h4 { color: var(--ink); }
+        #generatedUrl { background: var(--soft); border-color: var(--line); color: var(--muted); }
+        .bibtex-box { background: #0b1220; border: 1px solid #23304a; color: #d7e1ee; }
+        .search-result { border-color: var(--line); border-radius: 12px; }
+        .search-result .title { color: var(--ink); }
+        .search-result .authors { color: var(--muted); }
+        .search-result .journal { color: var(--brand); }
+        .batch-toolbar { display: flex; flex-wrap: wrap; gap: 10px; }
+        .batch-toolbar > * { flex: 0 1 auto; }
+        #cancelBatchButton, #clearLibraryButton { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+        #cancelBatchButton { color: var(--danger); }
+        .info-box { background: #eff6ff; border-color: var(--brand); color: #344054; }
+        body.dark-mode .info-box { background: #14213d; color: #cbd5e1; }
+        .library-manager { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
+        .library-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 12px; }
+        .library-head h3 { color: var(--ink); font-size: 17px; }
+        .library-head p { color: var(--muted); font-size: 13px; }
+        #libraryFilter { width: 310px; padding: 9px 12px; font-size: 13px; }
+        .library-empty { padding: 26px; border: 1px dashed var(--line); border-radius: 12px; text-align: center; color: var(--muted); }
+        .library-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); }
+        .library-item:last-child { border-bottom: 0; }
+        .library-item-title { color: var(--ink); font-weight: 700; line-height: 1.35; }
+        .library-item-meta { margin-top: 4px; color: var(--muted); font-size: 12px; }
+        .library-item-actions { display: flex; gap: 7px; }
+        .library-item-actions button { min-width: 0; padding: 7px 10px; border: 1px solid var(--line); background: #fff; color: #344054; font-size: 12px; }
+        body.dark-mode .library-item-actions button { background: #111827; color: #dbe4ef; }
+        .library-item-actions .remove { color: var(--danger); }
+        .footer { margin: 0; padding: 20px 42px 26px; border-top: 1px solid var(--line); color: var(--muted); }
+        button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible {
+            outline: 3px solid rgba(37,99,235,.32);
+            outline-offset: 2px;
+        }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+        @media (max-width: 768px) {
+            body { padding: 0; background: var(--panel); }
+            .container { min-height: 100vh; border: 0; border-radius: 0; box-shadow: none; }
+            .app-header { padding: 26px 20px 18px; }
+            .header-row { display: block; }
+            .header-tools { margin-top: 18px; }
+            .workspace { padding: 0 20px 30px; }
+            .tabs { gap: 18px; }
+            .tool-panel { padding: 18px; }
+            .primary-actions { grid-template-columns: 1fr; }
+            .helper-row { align-items: flex-start; flex-direction: column; }
+            .footer { padding: 18px 20px 24px; }
+            .library-head { align-items: stretch; flex-direction: column; }
+            #libraryFilter { width: 100%; }
+            .library-item { grid-template-columns: 1fr; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+            #three-container { display: none; }
+        }
     </style>
 </head>
 <body>
-    <div id="bg-container">
-        <canvas id="fluid"></canvas>
-        <div class="bg-grid"><canvas id="grid"></canvas></div>
-    </div>
-    <button class="theme-toggle" id="themeToggle" title="切换深色模式">🌙</button>
+    <div id="three-container" aria-hidden="true"></div>
     <div class="container">
-        <h1>学术文献获取工具</h1>
-        <p class="description">InspireHEP / APS Harvest / APS PDF直链 / Sci-Hub / LibGen + 批量BibTeX导出</p>
-        <div class="datetime" id="datetimeDisplay"></div>
-        <div class="platform-cards">
-            <div class="platform-card"><h3>APS Harvest</h3><p>APS官方全文平台（仅开放获取文章）。</p></div>
-            <div class="platform-card"><h3>APS PDF 直链</h3><p>按 DOI 直接下载 APS 官网全文（机构订阅 IP）。</p></div>
-            <div class="platform-card scihub"><h3>Sci-Hub</h3><p>开放获取学术文献平台。</p></div>
-            <div class="platform-card libgen"><h3>Library Genesis</h3><p>数字图书馆资源搜索。</p></div>
-            <div class="platform-card doi2bib"><h3>InspireHEP (优先)</h3><p>高能物理文献数据库。自动回退doi2bib。</p></div>
-        </div>
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="tab-doi">DOI查询</button>
-            <button class="tab-btn" data-tab="tab-search">标题/作者搜索</button>
-            <button class="tab-btn" data-tab="tab-batch">批量DOI</button>
+        <header class="app-header">
+            <div class="header-row">
+                <div>
+                    <div class="eyebrow">Research utility</div>
+                    <h1>学术文献工作台</h1>
+                    <p class="description">从 DOI、arXiv 或题名开始，获取标准 BibTeX，管理待导出引用，并快速前往全文来源。</p>
+                </div>
+                <div class="header-tools">
+                    <button class="library-pill" id="libraryPill" type="button" aria-label="查看引用库">引用库 <strong id="libraryCount">0</strong></button>
+                    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换深色模式" title="切换深色模式">🌙</button>
+                </div>
+            </div>
+            <div class="datetime" id="datetimeDisplay"></div>
+            <div class="source-strip" aria-label="可用数据源">
+                <span class="source-chip"><strong>doi.org</strong> 官方元数据</span>
+                <span class="source-chip"><strong>INSPIRE</strong> 物理学文献</span>
+                <span class="source-chip"><strong>APS</strong> 全文入口</span>
+                <span class="source-chip">本地处理 · 可导出 .bib</span>
+            </div>
+        </header>
+        <main class="workspace">
+        <div class="tabs" role="tablist" aria-label="检索方式">
+            <button class="tab-btn active" type="button" role="tab" aria-selected="true" aria-controls="tab-doi" id="tab-btn-doi" data-tab="tab-doi">单篇查询</button>
+            <button class="tab-btn" type="button" role="tab" aria-selected="false" aria-controls="tab-search" id="tab-btn-search" data-tab="tab-search">标题 / 作者</button>
+            <button class="tab-btn" type="button" role="tab" aria-selected="false" aria-controls="tab-batch" id="tab-btn-batch" data-tab="tab-batch">批量与导出</button>
         </div>
         <div id="tab-doi" class="tab-content active">
+            <section class="tool-panel" aria-labelledby="doi-panel-title">
+            <div class="panel-heading">
+                <h2 id="doi-panel-title">获取引用</h2>
+                <p>支持 DOI、doi.org 链接、arXiv ID，也可从一段引用文字中粘贴识别。</p>
+            </div>
             <div class="input-group">
-                <label for="doiInput">DOI（数字对象标识符）</label>
+                <label for="doiInput">DOI 或 arXiv</label>
                 <div class="input-with-button">
-                    <input type="text" id="doiInput" placeholder="例如：10.1103/PhysRevC.106.064325">
-                    <button id="pasteButton">粘贴DOI</button>
+                    <input type="text" id="doiInput" autocomplete="off" placeholder="例如：10.1103/PhysRevC.106.064325">
+                    <button id="pasteButton" type="button">粘贴并识别</button>
                 </div>
-                <div id="prefixButtons">
-                    <span class="prefix-button" data-prefix="10.1103/PhysRev">PhysRev</span>
-                    <span class="prefix-button" data-prefix="10.1038/">Nature</span>
-                    <span class="prefix-button" data-prefix="10.1016/j.">Elsevier</span>
-                    <span class="prefix-button" data-prefix="10.1007/">Springer</span>
-                    <span class="prefix-button" data-prefix="10.1088/">IOP</span>
+                <div class="helper-row" id="doiHistoryWrap">
+                <div class="history-wrap">
+                    <span class="history-label">最近查询</span>
+                    <div class="doi-history" id="doiHistory"></div>
                 </div>
-                <div class="doi-history" id="doiHistory"></div>
+                </div>
             </div>
-            <div class="button-group">
-                <button id="apsHarvestButton" title="APS Harvest 接口 harvest.aps.org/v2/journals/articles/&lt;DOI&gt;/fulltext —— 自 2025 起仅开放获取(OA)文章可下载，非 OA 返回 401/403">APS Harvest</button>
-                <button id="apsButton" title="APS 官网 PDF 直链 journals.aps.org/&lt;刊名&gt;/pdf/&lt;DOI&gt;（需机构订阅 IP；路径大小写敏感）">APS PDF</button>
-                <button id="scihubButton">Sci-Hub</button>
-                <button id="libgenButton">LibGen搜索</button>
-                <button id="doi2bibButton">获取BibTeX</button>
-                <button id="clearButton">清空</button>
+            <div class="primary-actions">
+                <button id="doiOrgButton" type="button" title="从 doi.org 取得 BibTeX，按 INSPIRE 标准缩写期刊名并规范化字段。">获取标准 BibTeX</button>
+                <button id="doi2bibButton" type="button">INSPIRE BibTeX</button>
             </div>
+            <div class="more-actions">
+                <div class="secondary-title">全文入口与其他操作</div>
+                <div class="button-group">
+                    <button id="openAccessButton" type="button" title="通过 Crossref 与 Semantic Scholar 查找开放获取 PDF，并验证 PDF 文件签名">查找开放 PDF</button>
+                    <button id="apsButton" type="button" title="先验证 APS Harvest 旧全文接口，失败后回退到 APS 官网 PDF，再失败则打开 DOI 页面">APS 全文（自动回退）</button>
+                    <button id="ableSciButton" type="button">科研通文献求助</button>
+                    <button id="scihubButton" type="button" title="检测候选站点能否建立连接；不检测站内是否已加载 PDF">检测并打开 Sci-Hub</button>
+                    <button id="libgenButton" type="button">外部图书馆搜索</button>
+                    <button id="clearButton" type="button">清空当前查询</button>
+                </div>
+            </div>
+            </section>
         </div>
         <div id="tab-search" class="tab-content">
+            <section class="tool-panel" aria-labelledby="search-panel-title">
+            <div class="panel-heading">
+                <h2 id="search-panel-title">按题名或作者检索</h2>
+                <p>从 INSPIRE 检索最多 20 条结果，可查看 BibTeX 或加入引用库。</p>
+            </div>
             <div class="input-group">
                 <label for="searchTitle">标题关键词</label>
                 <input type="text" id="searchTitle" placeholder="例如：shape coexistence superheavy">
@@ -194,30 +359,50 @@
                 <input type="text" id="searchYear" placeholder="例如：2023">
             </div>
             <div class="button-group">
-                <button id="searchButton" class="btn-search">在InspireHEP搜索</button>
-                <button id="clearSearchButton">清空</button>
+                <button id="searchButton" type="button" class="btn-search">搜索 INSPIRE</button>
+                <button id="clearSearchButton" type="button">清空条件</button>
             </div>
-            <div id="searchResults"></div>
+            <div id="searchResults" aria-live="polite"></div>
+            </section>
         </div>
         <div id="tab-batch" class="tab-content">
-            <div class="info-box"><p><strong>使用说明：</strong>每行一个DOI，批量从InspireHEP获取（自动回退到doi2bib），一键导出.bib。</p></div>
+            <section class="tool-panel" aria-labelledby="batch-panel-title">
+            <div class="panel-heading">
+                <h2 id="batch-panel-title">批量获取与引用库</h2>
+                <p>自动跳过重复 DOI，最多 3 个任务并发处理，查询结果会保存在当前浏览器。</p>
+            </div>
+            <div class="info-box"><p><strong>提示：</strong>每行一个 DOI。INSPIRE 未收录的条目会标记为失败，可再用单篇查询的 doi.org 渠道获取。</p></div>
             <div class="input-group">
                 <label for="batchDoiInput">DOI列表（每行一个）</label>
                 <textarea id="batchDoiInput" placeholder="10.1103/PhysRevC.107.024308&#10;10.1103/PhysRevLett.133.022501&#10;10.1016/j.physletb.2025.140130"></textarea>
             </div>
-            <div class="button-group">
-                <button id="batchButton" class="btn-batch">批量获取BibTeX</button>
-                <div class="file-input-wrap"><button style="background:#9b59b6;color:white;min-width:auto;">导入 .bib 合并</button><input type="file" id="bibFileInput" accept=".bib"></div>
-                <button id="exportButton" class="btn-export" disabled>导出 .bib 文件</button>
-                <button id="clearBatchButton">清空</button>
+            <div class="batch-toolbar">
+                <button id="batchButton" type="button" class="btn-batch">批量获取 BibTeX</button>
+                <button id="cancelBatchButton" type="button" style="display:none;">取消任务</button>
+                <div class="file-input-wrap"><button type="button" style="background:#7c3aed;color:white;min-width:auto;">导入 .bib</button><input type="file" id="bibFileInput" accept=".bib" aria-label="导入 BibTeX 文件"></div>
+                <button id="exportButton" type="button" class="btn-export" disabled>导出 .bib</button>
+                <button id="clearBatchButton" type="button">清空输入</button>
+                <button id="clearLibraryButton" type="button">清空引用库</button>
             </div>
-            <div id="batchProgress" class="batch-progress" style="display:none;">
-                <div class="bar"><div class="bar-fill" id="batchBarFill"></div></div>
-                <div class="status" id="batchStatus">准备中...</div>
+            <div id="batchProgress" class="batch-progress" style="display:none;" aria-live="polite">
+                <div class="bar" role="progressbar" aria-label="批量查询进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="bar-fill" id="batchBarFill"></div></div>
+                <div class="status" id="batchStatus">准备中…</div>
             </div>
             <div id="batchResults"></div>
+            <section class="library-manager" aria-labelledby="library-title">
+                <div class="library-head">
+                    <div>
+                        <h3 id="library-title">引用库</h3>
+                        <p>查看、复制或删除待导出的条目。</p>
+                    </div>
+                    <label class="sr-only" for="libraryFilter">筛选引用库</label>
+                    <input type="text" id="libraryFilter" placeholder="按标题、key 或 DOI 筛选">
+                </div>
+                <div id="libraryList"></div>
+            </section>
+            </section>
         </div>
-        <div class="result" id="resultSection">
+        <div class="result" id="resultSection" aria-live="polite">
             <h3>结果</h3>
             <div id="generatedUrl"></div>
             <div id="bibtexDisplay" style="display:none;">
@@ -241,18 +426,21 @@
                     <div class="preview-box" id="previewContent"></div>
                 </div>
             </div>
+            <button id="openCandidateButton" class="copy-button" type="button" style="display:none;margin-top:10px;background:#087f5b;">打开全文候选链接</button>
             <button id="copyUrlButton" class="copy-button" style="margin-top:10px;">复制URL</button>
         </div>
-        <div class="footer"><p>by xiaokui</p></div>
+        </main>
+        <div class="footer"><p>引用数据在浏览器本地处理 · by xiaokui</p></div>
     </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const doiInput = document.getElementById('doiInput');
     const pasteButton = document.getElementById('pasteButton');
-    const prefixButtons = document.querySelectorAll('.prefix-button');
     const apsButton = document.getElementById('apsButton');
-    const apsHarvestButton = document.getElementById('apsHarvestButton');
+    const openAccessButton = document.getElementById('openAccessButton');
+    const ableSciButton = document.getElementById('ableSciButton');
+    const doiOrgButton = document.getElementById('doiOrgButton');
     const scihubButton = document.getElementById('scihubButton');
     const libgenButton = document.getElementById('libgenButton');
     const doi2bibButton = document.getElementById('doi2bibButton');
@@ -260,6 +448,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const resultSection = document.getElementById('resultSection');
     const generatedUrl = document.getElementById('generatedUrl');
     const copyUrlButton = document.getElementById('copyUrlButton');
+    const openCandidateButton = document.getElementById('openCandidateButton');
     const bibtexContent = document.getElementById('bibtexContent');
     const bibtexDisplay = document.getElementById('bibtexDisplay');
     const copyBibtexButton = document.getElementById('copyBibtexButton');
@@ -275,21 +464,132 @@ document.addEventListener('DOMContentLoaded', function() {
     const batchButton = document.getElementById('batchButton');
     const exportButton = document.getElementById('exportButton');
     const clearBatchButton = document.getElementById('clearBatchButton');
+    const cancelBatchButton = document.getElementById('cancelBatchButton');
+    const clearLibraryButton = document.getElementById('clearLibraryButton');
+    const libraryPill = document.getElementById('libraryPill');
+    const libraryCount = document.getElementById('libraryCount');
+    const libraryFilter = document.getElementById('libraryFilter');
+    const libraryList = document.getElementById('libraryList');
     const batchProgress = document.getElementById('batchProgress');
     const batchBarFill = document.getElementById('batchBarFill');
     const batchStatus = document.getElementById('batchStatus');
     const batchResults = document.getElementById('batchResults');
-    let accumulatedBibtex = [];
+    const LIBRARY_STORAGE_KEY = 'academicPaperLibraryV2';
+    let activeBatchRun = 0;
+    let currentFulltextCandidate = '';
+    let accumulatedBibtex = loadLibrary();
+
+    function loadLibrary() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(LIBRARY_STORAGE_KEY) || '[]');
+            return Array.isArray(saved) ? saved.filter(x => typeof x === 'string' && x.trim().startsWith('@')) : [];
+        } catch (e) { return []; }
+    }
+    function normalizedDoi(value) {
+        return cleanDoi(value).replace(/[.,;]+$/, '').toLowerCase();
+    }
+    function libraryIdentity(bibtex) {
+        const doi = bibtex.match(/\bdoi\s*=\s*["{]([^"}]+)["}]/i);
+        if (doi) return 'doi:' + normalizedDoi(doi[1]);
+        const key = parseKey(bibtex);
+        return key ? 'key:' + key.toLowerCase() : 'raw:' + bibtex.trim();
+    }
+    function syncLibrary() {
+        const count = accumulatedBibtex.length;
+        libraryCount.textContent = String(count);
+        exportButton.disabled = count === 0;
+        exportButton.textContent = count ? '导出 .bib（' + count + '）' : '导出 .bib';
+        try { localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(accumulatedBibtex)); } catch (e) {}
+        renderLibrary();
+    }
+    function addToLibrary(bibtex) {
+        const entries = bibtex.trim().split(/\n(?=\s*@[A-Za-z])/).map(x => x.trim()).filter(Boolean);
+        let addedCount = 0, duplicateCount = 0;
+        entries.forEach(entry => {
+            const id = libraryIdentity(entry);
+            if (accumulatedBibtex.some(item => libraryIdentity(item) === id)) duplicateCount++;
+            else { accumulatedBibtex.push(entry); addedCount++; }
+        });
+        if (addedCount) syncLibrary();
+        return { added: addedCount > 0, addedCount, duplicateCount, key: parseKey(entries[0] || bibtex) };
+    }
+    function renderLibrary() {
+        if (!libraryList) return;
+        const query = (libraryFilter && libraryFilter.value || '').trim().toLowerCase();
+        libraryList.replaceChildren();
+        const visible = accumulatedBibtex.map((bibtex, index) => ({ bibtex, index })).filter(item => {
+            if (!query) return true;
+            return item.bibtex.toLowerCase().includes(query) || parseKey(item.bibtex).toLowerCase().includes(query);
+        });
+        if (!visible.length) {
+            const empty = document.createElement('div'); empty.className = 'library-empty';
+            empty.textContent = accumulatedBibtex.length ? '没有匹配的条目。' : '引用库还是空的，可从单篇、搜索或批量结果中添加。';
+            libraryList.append(empty); return;
+        }
+        visible.forEach(({ bibtex, index }) => {
+            let entry = null;
+            try { entry = bibParse(bibtex)[0]; } catch (e) {}
+            const row = document.createElement('div'); row.className = 'library-item';
+            const main = document.createElement('div');
+            const title = document.createElement('div'); title.className = 'library-item-title';
+            title.textContent = (entry && bibField(entry, 'title')) || parseKey(bibtex) || '未命名条目';
+            const meta = document.createElement('div'); meta.className = 'library-item-meta';
+            const doi = (bibtex.match(/\bdoi\s*=\s*["{]([^"}]+)/i) || [])[1] || '';
+            meta.textContent = [parseKey(bibtex), entry && bibField(entry, 'year'), doi].filter(Boolean).join(' · ');
+            main.append(title, meta);
+            const actions = document.createElement('div'); actions.className = 'library-item-actions';
+            const view = document.createElement('button'); view.type = 'button'; view.textContent = '查看';
+            view.addEventListener('click', () => {
+                bibtexContent.textContent = bibtex; bibtexDisplay.style.display = 'block';
+                generatedUrl.textContent = '来源：本地引用库'; resultSection.style.display = 'block'; showArxiv(bibtex);
+                resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+            const copyKey = document.createElement('button'); copyKey.type = 'button'; copyKey.textContent = '复制 key';
+            copyKey.addEventListener('click', () => copy(parseKey(bibtex), copyKey));
+            const copyBib = document.createElement('button'); copyBib.type = 'button'; copyBib.textContent = '复制 BibTeX';
+            copyBib.addEventListener('click', () => copy(bibtex, copyBib));
+            const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'remove'; remove.textContent = '删除';
+            remove.addEventListener('click', () => { accumulatedBibtex.splice(index, 1); syncLibrary(); });
+            actions.append(view, copyKey, copyBib, remove); row.append(main, actions); libraryList.append(row);
+        });
+    }
+    function setBatchProgress(completed, total, label) {
+        const percent = total ? Math.round((completed / total) * 100) : 0;
+        batchBarFill.style.width = percent + '%';
+        batchBarFill.parentElement.setAttribute('aria-valuenow', String(percent));
+        batchStatus.textContent = label;
+    }
+    syncLibrary();
+    libraryFilter.addEventListener('input', renderLibrary);
 
     // Tabs
-    document.querySelectorAll('.tab-btn').forEach(btn => {
+    const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+    tabButtons.forEach((btn, index) => {
         btn.addEventListener('click', function() {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            tabButtons.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
+            document.querySelectorAll('.tab-content').forEach(t => { t.classList.remove('active'); t.hidden = true; });
             this.classList.add('active');
-            document.getElementById(this.dataset.tab).classList.add('active');
+            this.setAttribute('aria-selected', 'true');
+            const panel = document.getElementById(this.dataset.tab);
+            panel.classList.add('active'); panel.hidden = false;
+        });
+        btn.addEventListener('keydown', function(e) {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+            e.preventDefault();
+            let next = index;
+            if (e.key === 'ArrowLeft') next = (index - 1 + tabButtons.length) % tabButtons.length;
+            if (e.key === 'ArrowRight') next = (index + 1) % tabButtons.length;
+            if (e.key === 'Home') next = 0;
+            if (e.key === 'End') next = tabButtons.length - 1;
+            tabButtons[next].focus(); tabButtons[next].click();
         });
     });
+    document.querySelectorAll('.tab-content').forEach((panel, index) => {
+        panel.setAttribute('role', 'tabpanel');
+        panel.setAttribute('aria-labelledby', tabButtons[index].id);
+        panel.hidden = index !== 0;
+    });
+    libraryPill.addEventListener('click', function() { document.getElementById('tab-btn-batch').click(); libraryFilter.focus(); });
 
     // Paste with smart DOI extraction
     pasteButton.addEventListener('click', async function() {
@@ -327,16 +627,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch(e) { alert('无法读取剪贴板'); }
     });
 
-    // Prefix buttons
-    prefixButtons.forEach(btn => {
-        btn.addEventListener('click', function() {
-            const p = this.dataset.prefix;
-            const v = doiInput.value.trim();
-            doiInput.value = v ? (v.endsWith('/') ? v + p : v + '/' + p) : p;
-            doiInput.focus();
-        });
-    });
-
     // Helpers
     function extractArxiv(bibtex) {
         const eprint = bibtex.match(/eprint\s*=\s*["{]([^"}]+)["}]/);
@@ -347,10 +637,19 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     function showArxiv(bibtex) {
         const ar = extractArxiv(bibtex);
-        if (ar) { arxivInfo.innerHTML = '📄 <a href="' + ar.url + '" target="_blank">arXiv:' + ar.id + '</a>' + (ar.pclass ? ' (' + ar.pclass + ')' : ''); arxivInfo.style.display = 'block'; }
+        arxivInfo.replaceChildren();
+        if (ar) {
+            arxivInfo.append('📄 ');
+            const link = document.createElement('a');
+            link.href = ar.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'arXiv:' + ar.id;
+            arxivInfo.append(link);
+            if (ar.pclass) arxivInfo.append(' (' + ar.pclass + ')');
+            arxivInfo.style.display = 'block';
+        }
         else { arxivInfo.style.display = 'none'; }
     }
     function showBibtex(bibtex, source) {
+        clearFulltextCandidate();
         bibtexContent.textContent = bibtex;
         bibtexDisplay.style.display = 'block';
         generatedUrl.textContent = '来源: ' + source;
@@ -360,7 +659,34 @@ document.addEventListener('DOMContentLoaded', function() {
         const doi = doiInput.value.trim();
         if (doi) addHistory(doi);
     }
-    function parseKey(bibtex) { const m = bibtex.match(/@\w+\{(\w+)/); return m ? m[1] : 'unknown'; }
+    function parseKey(bibtex) {
+        const m = bibtex.match(/^\s*@[\w-]+\s*[({]\s*([^,\s]+)/);
+        return m ? m[1].trim() : '';
+    }
+
+    function serializeBibEntry(entry) {
+        const width = Math.max(0, ...entry.fields.map(f => f.name.length));
+        const body = entry.fields.map(f => '  ' + f.name.padEnd(width) + ' = ' + f.value).join(',\n');
+        return '@' + entry.type + '{' + entry.key + ',\n' + body + '\n}';
+    }
+
+    function openExternal(url) {
+        const popup = window.open(url, '_blank', 'noopener,noreferrer');
+        if (popup) popup.opener = null;
+    }
+
+    function clearFulltextCandidate() {
+        currentFulltextCandidate = '';
+        openCandidateButton.style.display = 'none';
+    }
+    function showFulltextCandidate(url, label) {
+        currentFulltextCandidate = url;
+        openCandidateButton.textContent = label || '打开全文候选链接';
+        openCandidateButton.style.display = '';
+    }
+    openCandidateButton.addEventListener('click', function() {
+        if (currentFulltextCandidate) openExternal(currentFulltextCandidate);
+    });
 
     async function fetchFromInspire(doi) {
         // 先拿 JSON 获取完整作者
@@ -392,18 +718,22 @@ document.addEventListener('DOMContentLoaded', function() {
         let bibtex = await br.text();
         if (!bibtex || bibtex.length < 10) return null;
 
-        // 替换 "and others" 为完整作者列表
+        // 用结构化方式替换 "and others"，避免生成无效 BibTeX
         if (bibtex.includes(' and others')) {
-            const authorStr = authors.map(n => '"' + n + '"').join(' and ');
-            bibtex = bibtex.replace(/author\s*=\s*["{][^"}]+["}]/, 'author = ' + authorStr);
-            // 也去掉可能的 collaboration 重复
-            bibtex = bibtex.replace(/collaboration\s*=\s*["{][^"}]+["}],?\s*/g, '');
+            try {
+                const entry = bibParse(bibtex)[0];
+                const authorField = entry && entry.fields.find(f => f.name === 'author');
+                if (authorField && authors.length) {
+                    authorField.value = '{' + authors.join(' and ') + '}';
+                    bibtex = serializeBibEntry(entry);
+                }
+            } catch (e) { /* 保留 INSPIRE 原始 BibTeX */ }
         }
         return bibtex;
     }
     async function fetchFromDoi2bib(doi) {
         // doi2bib.org 不支持 CORS，直接在新标签页打开
-        window.open('https://www.doi2bib.org/bib/' + doi, '_blank');
+        openExternal('https://www.doi2bib.org/bib/' + encodeURIComponent(doi));
         return null;
     }
 
@@ -432,18 +762,44 @@ document.addEventListener('DOMContentLoaded', function() {
     addToBatchButton.addEventListener('click', function() {
         const bib = bibtexContent.textContent;
         if (!bib) return;
-        const key = parseKey(bib);
-        if (accumulatedBibtex.some(e => parseKey(e) === key)) { alert('已存在'); return; }
-        accumulatedBibtex.push(bib);
-        exportButton.disabled = false;
-        exportButton.textContent = '导出 .bib (' + accumulatedBibtex.length + ' 条)';
+        const result = addToLibrary(bib);
         const orig = this.textContent;
-        this.textContent = '✓ 已添加 (' + accumulatedBibtex.length + ')';
-        this.style.backgroundColor = '#27ae60';
-        setTimeout(() => { this.textContent = '添加到批量导出'; this.style.backgroundColor = '#3498db'; }, 2000);
+        this.textContent = result.added ? '✓ 已加入引用库（' + accumulatedBibtex.length + '）' : '已在引用库中';
+        this.style.backgroundColor = result.added ? '#087f5b' : '#667085';
+        setTimeout(() => { this.textContent = orig; this.style.backgroundColor = '#3498db'; }, 1800);
     });
 
     // Search
+    function bibField(entry, name) {
+        const field = entry && entry.fields.find(f => f.name === name);
+        if (!field) return '';
+        return bibUnwrap(field.value).replace(/[{}]/g, '').replace(/\\([A-Za-z]+)\s*/g, '$1').replace(/\s+/g, ' ').trim();
+    }
+    function renderSearchResults(entries) {
+        searchResults.replaceChildren();
+        const summary = document.createElement('p');
+        summary.style.marginBottom = '10px'; summary.textContent = '找到 ' + entries.length + ' 条：';
+        searchResults.append(summary);
+        entries.forEach((raw, idx) => {
+            let entry;
+            try { entry = bibParse(raw)[0]; } catch (e) { return; }
+            const card = document.createElement('article'); card.className = 'search-result';
+            const title = document.createElement('div'); title.className = 'title';
+            const fullTitle = bibField(entry, 'title');
+            title.textContent = (idx + 1) + '. ' + (fullTitle.length > 130 ? fullTitle.slice(0, 130) + '…' : fullTitle || '未命名文献');
+            card.append(title);
+            const authors = bibField(entry, 'author');
+            if (authors) { const el = document.createElement('div'); el.className = 'authors'; el.textContent = authors.length > 180 ? authors.slice(0, 180) + '…' : authors; card.append(el); }
+            const journal = bibField(entry, 'journal'); const year = bibField(entry, 'year');
+            if (journal || year) { const el = document.createElement('div'); el.className = 'journal'; el.textContent = [journal, year].filter(Boolean).join(' · '); card.append(el); }
+            const ar = extractArxiv(raw);
+            if (ar) { const el = document.createElement('div'); el.className = 'meta'; el.textContent = 'arXiv:' + ar.id; card.append(el); }
+            const actions = document.createElement('div'); actions.className = 'actions';
+            const view = document.createElement('button'); view.type = 'button'; view.className = 'copy-button'; view.textContent = '查看 BibTeX'; view.addEventListener('click', () => viewSearchEntry(idx));
+            const add = document.createElement('button'); add.type = 'button'; add.className = 'copy-button'; add.style.background = '#2563eb'; add.textContent = '加入引用库'; add.addEventListener('click', () => addSearchEntry(idx, add));
+            actions.append(view, add); card.append(actions); searchResults.append(card);
+        });
+    }
     searchButton.addEventListener('click', async function() {
         const title = searchTitle.value.trim();
         const author = searchAuthor.value.trim();
@@ -451,41 +807,24 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!title && !author) { alert('请输入标题或作者'); return; }
         const orig = this.textContent;
         this.textContent = '搜索中...'; this.disabled = true;
-        searchResults.innerHTML = '<p style="color:#7f8c8d;">搜索中...</p>';
+        searchResults.textContent = '搜索中…';
         try {
             let q = '';
             if (title) q += 'title:' + encodeURIComponent(title);
             if (author) q += (q ? '+and+' : '') + 'authors:' + encodeURIComponent(author);
             if (year) q += (q ? '+and+' : '') + 'date:' + encodeURIComponent(year);
             const r = await fetch('https://inspirehep.net/api/literature?q=' + q + '&format=bibtex&size=20');
-            if (!r.ok) { searchResults.innerHTML = '<p style="color:#e74c3c;">搜索失败</p>'; return; }
+            if (!r.ok) { searchResults.textContent = '搜索失败（HTTP ' + r.status + '）'; return; }
             const bib = await r.text();
-            if (bib.length < 10) { searchResults.innerHTML = '<p style="color:#e74c3c;">未找到结果</p>'; return; }
+            if (bib.length < 10) { searchResults.textContent = '未找到结果'; return; }
             const entries = bib.split(/\n(?=@\w+)/);
-            let html = '<p style="margin-bottom:10px;">找到 ' + entries.length + ' 条：</p>';
             window._searchEntries = entries;
-            entries.forEach((entry, idx) => {
-                const k = parseKey(entry);
-                const tm = entry.match(/title\s*=\s*["{]([^"}]+)["}]/);
-                const am = entry.match(/author\s*=\s*["{]([^"}]+)["}]/);
-                const jm = entry.match(/journal\s*=\s*["{]([^"}]+)["}]/);
-                const ym = entry.match(/year\s*=\s*["{](\d+)["}]/);
-                const ar = extractArxiv(entry);
-                const t = tm ? (tm[1].length > 80 ? tm[1].substring(0,80)+'...' : tm[1]) : '';
-                const a = am ? am[1].substring(0,100) : '';
-                html += '<div class="search-result"><div class="title">' + (idx+1) + '. ' + t + '</div>';
-                if (a) html += '<div class="authors">' + a.replace(/\s+/g,' ') + '</div>';
-                html += '<div class="journal">' + (jm?jm[1]:'') + (ym?' ('+ym[1]+')':'') + '</div>';
-                if (ar) html += '<div class="meta">📄 arXiv:' + ar.id + '</div>';
-                html += '<div class="actions"><button class="copy-button" onclick="window._viewEntry('+idx+')">查看BibTeX</button>';
-                html += '<button class="copy-button" style="background:#3498db;" onclick="window._addEntry('+idx+')">添加</button></div></div>';
-            });
-            searchResults.innerHTML = html;
+            renderSearchResults(entries);
             this.textContent = '✓ 完成';
-        } catch(e) { searchResults.innerHTML = '<p style="color:#e74c3c;">搜索失败</p>'; this.textContent = '搜索失败'; }
+        } catch(e) { searchResults.textContent = '搜索失败：' + (e.message || '网络错误'); this.textContent = '搜索失败'; }
         setTimeout(() => { this.textContent = orig; this.style.backgroundColor = '#3498db'; this.disabled = false; }, 3000);
     });
-    window._viewEntry = function(idx) {
+    function viewSearchEntry(idx) {
         const e = window._searchEntries[idx];
         if (!e) return;
         bibtexContent.textContent = e;
@@ -493,56 +832,81 @@ document.addEventListener('DOMContentLoaded', function() {
         generatedUrl.textContent = '来源: InspireHEP 搜索结果 #' + (idx+1);
         resultSection.style.display = 'block';
         showArxiv(e);
-        document.querySelector('[data-tab="tab-doi"]').click();
-    };
-    window._addEntry = function(idx) {
+        document.getElementById('tab-btn-doi').click();
+        resultSection.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    }
+    function addSearchEntry(idx, button) {
         const e = window._searchEntries[idx];
         if (!e) return;
-        const k = parseKey(e);
-        if (accumulatedBibtex.some(x => parseKey(x) === k)) { alert('已存在'); return; }
-        accumulatedBibtex.push(e);
-        exportButton.disabled = false;
-        exportButton.textContent = '导出 .bib (' + accumulatedBibtex.length + ' 条)';
-        alert('已添加: ' + k);
-    };
+        const result = addToLibrary(e);
+        button.textContent = result.added ? '✓ 已加入' : '已存在';
+        button.disabled = true;
+    }
 
     // Batch
     batchButton.addEventListener('click', async function() {
-        const doIs = batchDoiInput.value.trim().split('\n').map(d => d.trim()).filter(d => d.length > 0);
-        if (doIs.length === 0) { alert('请输入DOI'); return; }
+        const inputDois = batchDoiInput.value.split(/\n+/).map(d => cleanDoi(d.trim())).filter(Boolean);
+        const uniqueMap = new Map();
+        inputDois.forEach(doi => { const id = normalizedDoi(doi); if (id && !uniqueMap.has(id)) uniqueMap.set(id, doi); });
+        const doIs = Array.from(uniqueMap.values());
+        if (doIs.length === 0) { alert('请输入 DOI'); return; }
+        const duplicateInputCount = inputDois.length - doIs.length;
+        const runId = ++activeBatchRun;
         const orig = this.textContent;
-        this.textContent = '批量获取中...'; this.disabled = true;
-        batchProgress.style.display = 'block'; batchResults.innerHTML = '';
-        const results = [];
-        for (let i = 0; i < doIs.length; i++) {
-            batchBarFill.style.width = Math.round((i/doIs.length)*100) + '%';
-            batchStatus.textContent = '处理中 (' + (i+1) + '/' + doIs.length + '): ' + doIs[i];
-            try {
-                let bib = await fetchFromInspire(doIs[i]);
-                let src = 'InspireHEP';
-                if (!bib) { bib = null; src = 'inspire无结果'; }
-                results.push({ doi: doIs[i], bibtex: bib, source: src, success: !!bib });
-            } catch(e) { results.push({ doi: doIs[i], bibtex: null, source: '', success: false }); }
-        }
-        batchBarFill.style.width = '100%';
-        batchStatus.textContent = '完成! 成功 ' + results.filter(r=>r.success).length + '/' + results.length;
-        let html = '<p style="margin-bottom:10px;font-weight:600;">处理完成:</p>';
-        results.forEach(r => {
-            if (r.success) {
-                accumulatedBibtex.push(r.bibtex);
-                const key = parseKey(r.bibtex);
-                const ar = extractArxiv(r.bibtex);
-                html += '<div class="search-result" style="border-left:3px solid #2ecc71;">✓ <strong>' + key + '</strong> (' + r.source + ')' + (ar ? ' arXiv:'+ar.id : '') + '</div>';
-            } else {
-                html += '<div class="search-result" style="border-left:3px solid #e74c3c;">✗ ' + r.doi + ' (失败)</div>';
+        this.textContent = '批量获取中…'; this.disabled = true;
+        cancelBatchButton.style.display = '';
+        batchProgress.style.display = 'block'; batchResults.replaceChildren();
+        setBatchProgress(0, doIs.length, '准备处理 ' + doIs.length + ' 条 DOI…');
+        const results = new Array(doIs.length);
+        let nextIndex = 0, completed = 0;
+        async function worker() {
+            while (activeBatchRun === runId) {
+                const index = nextIndex++;
+                if (index >= doIs.length) return;
+                const doi = doIs[index];
+                try {
+                    const bib = await fetchFromInspire(doi);
+                    results[index] = { doi, bibtex: bib, source: 'INSPIRE', success: !!bib };
+                } catch(e) { results[index] = { doi, bibtex: null, source: '', success: false, error: e.message }; }
+                completed++;
+                setBatchProgress(completed, doIs.length, '已处理 ' + completed + ' / ' + doIs.length);
             }
+        }
+        await Promise.all(Array.from({ length: Math.min(3, doIs.length) }, worker));
+        const cancelled = activeBatchRun !== runId;
+        const finished = results.filter(Boolean);
+        batchResults.replaceChildren();
+        const summary = document.createElement('p'); summary.style.marginBottom = '10px'; summary.style.fontWeight = '700';
+        let added = 0, libraryDuplicates = 0;
+        finished.forEach(r => {
+            const row = document.createElement('div'); row.className = 'search-result';
+            if (r.success) {
+                const outcome = addToLibrary(r.bibtex);
+                outcome.added ? added++ : libraryDuplicates++;
+                row.style.borderLeft = '3px solid #087f5b';
+                row.textContent = (outcome.added ? '✓ ' : '↷ ') + (outcome.key || r.doi) + (outcome.added ? ' · 已加入' : ' · 已存在，已跳过');
+            } else {
+                row.style.borderLeft = '3px solid #c92a2a';
+                row.textContent = '✗ ' + r.doi + ' · INSPIRE 未返回结果';
+            }
+            batchResults.append(row);
         });
-        batchResults.innerHTML = html;
-        exportButton.disabled = false;
-        exportButton.textContent = '导出 .bib (' + accumulatedBibtex.length + ' 条)';
-        this.textContent = '✓ 完成 (' + results.filter(r=>r.success).length + '/' + results.length + ')';
-        this.style.backgroundColor = '#27ae60';
-        setTimeout(() => { this.textContent = orig; this.style.backgroundColor = '#2ecc71'; this.disabled = false; }, 3000);
+        const successCount = finished.filter(r => r.success).length;
+        summary.textContent = cancelled ? '任务已取消，已保留完成的 ' + finished.length + ' 条。' :
+            '完成：成功 ' + successCount + '/' + doIs.length + '，新增 ' + added + ' 条' +
+            (duplicateInputCount + libraryDuplicates ? '，跳过重复 ' + (duplicateInputCount + libraryDuplicates) + ' 条' : '') + '。';
+        batchResults.prepend(summary);
+        setBatchProgress(finished.length, doIs.length, summary.textContent);
+        cancelBatchButton.style.display = 'none';
+        this.textContent = cancelled ? '已取消' : '✓ 处理完成';
+        this.style.backgroundColor = cancelled ? '#667085' : '#087f5b';
+        setTimeout(() => { this.textContent = orig; this.style.backgroundColor = '#2ecc71'; this.disabled = false; }, 1800);
+    });
+
+    cancelBatchButton.addEventListener('click', function() {
+        activeBatchRun++;
+        this.style.display = 'none';
+        batchStatus.textContent = '正在停止，已发出的请求会先完成…';
     });
 
     // Export .bib
@@ -555,15 +919,129 @@ document.addEventListener('DOMContentLoaded', function() {
         const d = new Date();
         a.download = 'references_' + d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + '.bib';
         a.click();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
 
     // Clear buttons
-    clearButton.addEventListener('click', function() { doiInput.value = ''; resultSection.style.display = 'none'; bibtexDisplay.style.display = 'none'; doiInput.focus(); });
-    clearSearchButton.addEventListener('click', function() { searchTitle.value = ''; searchAuthor.value = ''; searchYear.value = ''; searchResults.innerHTML = ''; });
-    clearBatchButton.addEventListener('click', function() { batchDoiInput.value = ''; batchResults.innerHTML = ''; batchProgress.style.display = 'none'; });
+    clearButton.addEventListener('click', function() {
+        doiInput.value = '';
+        clearFulltextCandidate();
+        resultSection.style.display = 'none';
+        bibtexDisplay.style.display = 'none';
+        doiInput.focus();
+    });
+    clearSearchButton.addEventListener('click', function() { searchTitle.value = ''; searchAuthor.value = ''; searchYear.value = ''; searchResults.replaceChildren(); });
+    clearBatchButton.addEventListener('click', function() { batchDoiInput.value = ''; batchResults.replaceChildren(); batchProgress.style.display = 'none'; });
+    clearLibraryButton.addEventListener('click', function() {
+        if (!accumulatedBibtex.length) return;
+        if (!confirm('确定清空本地引用库中的 ' + accumulatedBibtex.length + ' 条记录吗？')) return;
+        accumulatedBibtex = []; syncLibrary();
+        const note = document.createElement('div'); note.className = 'search-result'; note.textContent = '引用库已清空。';
+        batchResults.replaceChildren(note);
+    });
 
     // ==================== APS 官网 PDF 直链 ====================
+    async function fetchJsonWithTimeout(url, timeoutMs) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs || 10000);
+        try {
+            const response = await fetch(url, { signal: controller.signal });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return await response.json();
+        } finally { clearTimeout(timer); }
+    }
+
+    async function verifyPdfCandidate(candidate) {
+        try {
+            const parsed = new URL(candidate.url);
+            if (!/^https?:$/.test(parsed.protocol)) return { verified: false, ...candidate };
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 8000);
+            try {
+                const response = await fetch(parsed.href, {
+                    method: 'GET',
+                    redirect: 'follow',
+                    headers: { Accept: 'application/pdf', Range: 'bytes=0-1023' },
+                    signal: controller.signal
+                });
+                const type = (response.headers.get('content-type') || '').toLowerCase();
+                if (!response.ok || !response.body) return { verified: false, ...candidate, type };
+                const reader = response.body.getReader();
+                const first = await reader.read();
+                await reader.cancel().catch(() => {});
+                const bytes = first.value ? first.value.slice(0, 1024) : new Uint8Array();
+                const signature = new TextDecoder('latin1').decode(bytes);
+                const verified = signature.includes('%PDF-');
+                return { verified, url: response.url || parsed.href, source: candidate.source, type };
+            } finally { clearTimeout(timer); }
+        } catch (e) { return { verified: false, ...candidate }; }
+    }
+
+    async function findFulltextCandidates(doi) {
+        const candidates = [];
+        const crossrefUrl = 'https://api.crossref.org/works/' + encodeURIComponent(doi);
+        const semanticUrl = 'https://api.semanticscholar.org/graph/v1/paper/' +
+            encodeURIComponent('DOI:' + doi) + '?fields=title,isOpenAccess,openAccessPdf,url';
+        const [crossref, semantic] = await Promise.allSettled([
+            fetchJsonWithTimeout(crossrefUrl, 10000),
+            fetchJsonWithTimeout(semanticUrl, 10000)
+        ]);
+        if (crossref.status === 'fulfilled') {
+            const links = ((crossref.value || {}).message || {}).link || [];
+            links.filter(link => /application\/pdf/i.test(link['content-type'] || '') && link.URL)
+                .forEach(link => candidates.push({ url: link.URL, source: 'Crossref 出版商链接' }));
+        }
+        if (semantic.status === 'fulfilled') {
+            const record = semantic.value || {};
+            if (record.isOpenAccess && record.openAccessPdf && record.openAccessPdf.url) {
+                candidates.unshift({ url: record.openAccessPdf.url, source: 'Semantic Scholar 开放获取' });
+            }
+        }
+        const seen = new Set();
+        return candidates.filter(item => {
+            if (seen.has(item.url)) return false;
+            seen.add(item.url); return true;
+        });
+    }
+
+    openAccessButton.addEventListener('click', async function() {
+        const doi = normalizedDoi(doiInput.value);
+        if (!doi) { alert('请输入 DOI'); return; }
+        const old = this.textContent;
+        this.disabled = true; this.textContent = '正在查找并验证…';
+        clearFulltextCandidate();
+        resultSection.style.display = 'block';
+        generatedUrl.textContent = '正在通过 Crossref 与 Semantic Scholar 查找全文候选…';
+        try {
+            const candidates = await findFulltextCandidates(doi);
+            if (!candidates.length) {
+                generatedUrl.textContent = '未发现开放全文候选。可以尝试 APS、出版社落地页，或使用科研通发起文献求助。';
+                return;
+            }
+            const checked = await Promise.all(candidates.slice(0, 6).map(verifyPdfCandidate));
+            const pdf = checked.find(item => item.verified);
+            if (pdf) {
+                generatedUrl.textContent = '已读取并确认 PDF 文件签名（' + pdf.source + '）\n' + pdf.url;
+                openExternal(pdf.url);
+            } else {
+                generatedUrl.textContent = '找到了全文候选，但受跨域限制或未读到 PDF 文件签名，无法确认已加载 PDF：\n' + candidates[0].url;
+                showFulltextCandidate(candidates[0].url, '打开未验证的全文候选');
+            }
+        } catch (e) {
+            generatedUrl.textContent = '开放全文查询失败：' + (e.message || '网络错误');
+        } finally {
+            this.disabled = false; this.textContent = old;
+        }
+    });
+
+    ableSciButton.addEventListener('click', function() {
+        const doi = cleanDoi(doiInput.value);
+        clearFulltextCandidate();
+        generatedUrl.textContent = '已打开科研通文献求助平台' + (doi ? '；当前 DOI：' + doi : '') + '\nhttps://www.ablesci.com/';
+        resultSection.style.display = 'block';
+        openExternal('https://www.ablesci.com/');
+    });
+
     // 为什么不用 harvest: harvest API 自 2025 起对非 OA 文章一律 401/403（仅 OA 可用），
     // 改用 APS 官网直链 journals.aps.org/<slug>/pdf/<DOI> —— 走机构订阅 IP，免 cookie。
     // 两个坑: (1) 路径 DOI 大小写敏感；(2) slug 必须与期刊对应。
@@ -632,36 +1110,570 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     apsButton.addEventListener('click', async function() {
-        const res = await resolveApsPdf(doiInput.value);
-        if (res.error) { alert(res.error + '\n例如：10.1103/PhysRevC.111.034320'); return; }
-        const url = res.url || res.fallback;
-        generatedUrl.textContent = res.note ? res.note + '\n' + url : url;
+        const old = this.textContent;
+        this.disabled = true; this.textContent = '正在检查 APS 全文…';
+        clearFulltextCandidate();
         resultSection.style.display = 'block';
-        window.open(url, '_blank');
+        generatedUrl.textContent = '正在解析 APS DOI 并检查 Harvest 旧全文接口…';
+        const res = await resolveApsPdf(doiInput.value);
+        if (res.error) {
+            this.disabled = false; this.textContent = old;
+            alert(res.error + '\n例如：10.1103/PhysRevC.111.034320');
+            return;
+        }
+        const officialUrl = res.url || res.fallback;
+        const resolvedDoi = res.url && res.url.includes('/pdf/')
+            ? decodeURIComponent(res.url.split('/pdf/')[1]) : cleanDoi(doiInput.value);
+        const encodedDoi = resolvedDoi.split('/').map(encodeURIComponent).join('/');
+        const harvestUrl = 'https://harvest.aps.org/v2/journals/articles/' + encodedDoi + '/fulltext';
+        const harvest = await verifyPdfCandidate({ url: harvestUrl, source: 'APS Harvest 旧接口' });
+        this.disabled = false; this.textContent = old;
+        if (harvest.verified) {
+            generatedUrl.textContent = '已确认 APS Harvest 返回 PDF 文件，正在打开：\n' + harvest.url;
+            openExternal(harvest.url);
+            return;
+        }
+        generatedUrl.textContent = 'APS Harvest 旧接口未返回可验证的 PDF，已自动回退。\n' +
+            (res.note ? res.note + '\n' : '回退到 APS 官网 PDF：\n') + officialUrl;
+        openExternal(officialUrl);
     });
 
-    // APS Harvest 接口（原样保留；仅 OA 文章可用，非 OA 返回 401 not authorized / 403）
-    apsHarvestButton.addEventListener('click', function() {
+    // ==================== doi.org BibTeX（bibtex.org/Convert 同款后处理） ====================
+    // 数据来源：https://doi.org/<DOI> + Accept: application/x-bibtex —— DOI 官方内容协商；浏览器会自动
+    // 跟随 doi.org 的 302 到注册机构（Crossref/DataCite）的 transform 端点，这是 DOI 解析本身的行为，
+    // 不经过 bibtex.org 之类第三方站点。拿到原文后按 bibtex.org 的规则重排：固定字段序、默认去
+    // abstract/copyright/keywords、pages/url/month 规范化、key 用 scholar 风格、重名 key 追加 a/b/c、'=' 对齐。
+    // 规则逐行移植自其 DoiLookup.js（勿化简中间表达式），已用 5 个 DOI 与其线上输出逐字节比对通过。
+    const BIB_FIELD_ORDER = ['author','editor','title','journal','booktitle','series','year','month',
+        'volume','number','pages','edition','chapter','publisher','school','institution','organization',
+        'address','howpublished','note','isbn','issn','doi','url'];
+    const BIB_DROP = new Set(['abstract','copyright','keywords']);
+    const BIB_STOP = new Set('a an the on of in for and to with from at by is are as via toward towards into its'.split(' '));
+    const BIB_KEYSTYLE = 'scholar';   // scholar | authoryear | source（与 bibtex.org 默认一致）
+
+    function bibUnwrap(v) { return v.replace(/^[{"]|[}"]$/g, ''); }
+    function bibSlug(s) { return s.replace(/\\[a-zA-Z]+\s*|\\./g, '').normalize('NFD').replace(/[^A-Za-z0-9]/g, ''); }
+
+    function bibParse(src) {
+        let out = [], n = 0;
+        const ws = () => { while (n < src.length && /\s/.test(src[n])) n++; };
+        const braced = (open, close) => {
+            let start = n, depth = 0;
+            for (; n < src.length; n++) {
+                const ch = src[n];
+                if (ch === '\\') { n++; continue; }
+                if (ch === open) depth++;
+                else if (ch === close && --depth === 0) { n++; return src.slice(start, n); }
+            }
+            throw new Error('Unbalanced braces');
+        };
+        const quoted = () => {
+            let start = n++, depth = 0;
+            for (; n < src.length; n++) {
+                const ch = src[n];
+                if (ch === '\\') { n++; continue; }
+                if (ch === '{') depth++;
+                else if (ch === '}') depth--;
+                else if (ch === '"' && depth === 0) { n++; return src.slice(start, n); }
+            }
+            throw new Error('Unterminated string');
+        };
+        const value = () => {
+            let parts = [];
+            for (;;) {
+                ws();
+                const ch = src[n];
+                if (ch === '{') parts.push(braced('{', '}'));
+                else if (ch === '"') parts.push(quoted());
+                else {
+                    const m = /^[^\s,#{}"]+/.exec(src.slice(n));
+                    if (!m) throw new Error('Expected a value');
+                    parts.push(m[0]); n += m[0].length;
+                }
+                ws();
+                if (src[n] === '#') { n++; continue; }
+                return parts.join(' # ');
+            }
+        };
+        for (; (n = src.indexOf('@', n)) !== -1;) {
+            n++;
+            const hdr = /^([A-Za-z]+)\s*([{(])/.exec(src.slice(n));
+            if (!hdr) continue;
+            const type = hdr[1].toLowerCase();
+            n += hdr[0].length;
+            const close = hdr[2] === '{' ? '}' : ')';
+            if (type === 'comment' || type === 'preamble' || type === 'string') { n--; braced(hdr[2], close); continue; }
+            ws();
+            const comma = src.indexOf(',', n);
+            if (comma === -1) throw new Error('Missing citation key');
+            const key = src.slice(n, comma).trim();
+            n = comma + 1;
+            const fields = [];
+            for (;;) {
+                ws();
+                if (src[n] === close) { n++; break; }
+                if (src[n] === ',') { n++; continue; }
+                const fm = /^([A-Za-z][\w\-:.]*)\s*=/.exec(src.slice(n));
+                if (!fm) throw new Error('Unexpected input in entry ' + key);
+                n += fm[0].length;
+                fields.push({ name: fm[1].toLowerCase(), value: value() });
+            }
+            out.push({ type: type, key: key, fields: fields });
+        }
+        return out;
+    }
+
+    function bibMakeKey(entry, keystyle) {
+        if (keystyle === 'source' && !/[/:]/.test(entry.key)) return entry.key;
+        const f = name => bibUnwrap((entry.fields.find(x => x.name === name) || {}).value || '');
+        let first = (f('author') || f('editor')).split(/\s+and\s+/)[0];
+        if (first === undefined) first = '';
+        const surnameRaw = first.includes(',') ? first.split(',')[0] : (first.trim().split(/\s+/).pop() || '');
+        const surname = bibSlug(surnameRaw) || 'anon';
+        const year = (/\d{4}/.exec(f('year')) || [])[0] || '';
+        if (keystyle === 'authoryear') return surname[0].toUpperCase() + surname.slice(1) + year;
+        const word = f('title').replace(/[{}]/g, '').split(/[\s\-–—:]+/).map(bibSlug)
+            .find(w => w && !BIB_STOP.has(w.toLowerCase())) || '';
+        return (surname + year + word).toLowerCase();
+    }
+
+    function bibNormField(name, v, journalOverride) {
+        let out = v;
+        if (name === 'title') out = bibCleanTitle(out);
+        if (name === 'journal' && journalOverride) out = bibWrapLike(v, journalOverride);
+        else if (name === 'journal' || name === 'booktitle') out = bibAbbrevJournal(out);
+        if (name === 'pages') out = out.replace(/\s*[–—-]+\s*/g, '--');
+        if (name === 'url') out = out.replace(/^([{"])(https?:\/\/(dx\.)?doi\.org\/)/, '$1https://doi.org/');
+        if (name === 'month' && /^[A-Za-z]{3,}$/.test(out)) out = out.slice(0, 3).toLowerCase();
+        return out;
+    }
+
+    // 保持原文的包裹形式（{...} / "..." / 裸值）替换成新值
+    function bibWrapLike(v, value) {
+        const open = v.startsWith('{') ? '{' : (v.startsWith('"') ? '"' : '');
+        const close = open === '{' ? '}' : (open === '"' ? '"' : '');
+        return open + value + close;
+    }
+
+    // INSPIRE 的 bibtex 导出把拼接形式（Phys.Rev.C）写成带空格的缩写（Phys. Rev. C）：句点后补空格
+    function bibInspireSpacing(t) {
+        return String(t).replace(/\.(?=\S)/g, '. ');
+    }
+
+    // ---- journal 用期刊标准缩写（INSPIRE/APS 风格，如 Physical Review C → Phys. Rev. C）----
+    // 数据源给的是出版商全称（Crossref 的 container-title），投稿/REVTeX 要的是缩写形式
+    const BIB_JOURNAL_ABBREV = true;
+    const BIB_JOURNAL_MAP = {
+        // === APS 系列 ===
+        'physical review c': 'Phys. Rev. C',
+        'physical review letters': 'Phys. Rev. Lett.',
+        'physical review b': 'Phys. Rev. B',
+        'physical review a': 'Phys. Rev. A',
+        'physical review d': 'Phys. Rev. D',
+        'physical review e': 'Phys. Rev. E',
+        'physical review': 'Phys. Rev.',
+        'reviews of modern physics': 'Rev. Mod. Phys.',
+        'physical review x': 'Phys. Rev. X',
+        'physical review b - condensed matter and materials physics': 'Phys. Rev. B',
+        'physical review c - nuclear physics': 'Phys. Rev. C',
+        'physical review d - particles, fields, gravitation, and cosmology': 'Phys. Rev. D',
+        'physical review research': 'Phys. Rev. Research',
+        'physical review applied': 'Phys. Rev. Applied',
+        'physical review fluids': 'Phys. Rev. Fluids',
+        'physical review materials': 'Phys. Rev. Materials',
+        'physical review accelerators and beams': 'Phys. Rev. Accel. Beams',
+        'physical review special topics - accelerators and beams': 'Phys. Rev. ST Accel. Beams',
+        'physical review physics education research': 'Phys. Rev. Phys. Educ. Res.',
+        'physical review special topics - physics education research': 'Phys. Rev. ST Phys. Educ. Res.',
+        'prx quantum': 'PRX Quantum',
+
+        // === Elsevier 核物理系列 ===
+        'nuclear physics a': 'Nucl. Phys. A',
+        'nuclear physics b': 'Nucl. Phys. B',
+        'nuclear physics': 'Nucl. Phys.',
+        'physics letters b': 'Phys. Lett. B',
+        'physics letters a': 'Phys. Lett. A',
+        'physics letters': 'Phys. Lett.',
+        'physics reports': 'Phys. Rep.',
+        'progress in particle and nuclear physics': 'Prog. Part. Nucl. Phys.',
+        'annals of physics': 'Ann. Phys.',
+        'atomic data and nuclear data tables': 'At. Data Nucl. Data Tables',
+        'nuclear data sheets': 'Nucl. Data Sheets',
+        'nuclear instruments and methods in physics research section a': 'Nucl. Instrum. Methods Phys. Res. A',
+        'nuclear instruments and methods in physics research section b': 'Nucl. Instrum. Methods Phys. Res. B',
+        'nuclear instruments and methods': 'Nucl. Instrum. Methods',
+        'computer physics communications': 'Comput. Phys. Commun.',
+        'nuclear instruments and methods in physics research section a: accelerators, spectrometers, detectors and associated equipment': 'Nucl. Instrum. Methods Phys. Res. A',
+        'nuclear instruments and methods in physics research section b: beam interactions with materials and atoms': 'Nucl. Instrum. Methods Phys. Res. B',
+
+        // === Springer 系列 ===
+        'the european physical journal a': 'Eur. Phys. J. A',
+        'the european physical journal plus': 'Eur. Phys. J. Plus',
+        'the european physical journal special topics': 'Eur. Phys. J. Spec. Top.',
+        'the european physical journal': 'Eur. Phys. J.',
+        'the european physical journal a: hadrons and nuclei': 'Eur. Phys. J. A',
+        'the european physical journal b': 'Eur. Phys. J. B',
+        'zeitschrift für physik a hadrons and nuclei': 'Z. Phys. A',
+        'zeitschrift für physik a': 'Z. Phys. A',
+        'il nuovo cimento a': 'Nuovo Cimento A',
+        'few-body systems': 'Few-Body Syst.',
+        'hyperfine interactions': 'Hyperfine Interact.',
+        'journal of physics g: nuclear and particle physics': 'J. Phys. G: Nucl. Part. Phys.',
+        'journal of physics g': 'J. Phys. G',
+        'the european physical journal c': 'Eur. Phys. J. C',
+        'progress of theoretical and experimental physics': 'PTEP',
+        'progress of theoretical physics': 'Prog. Theor. Phys.',
+
+        // === IOP/中国物理 ===
+        'chinese physics c': 'Chin. Phys. C',
+        'chinese physics letters': 'Chin. Phys. Lett.',
+        'chinese physics b': 'Chin. Phys. B',
+        'chinese science bulletin': 'Chin. Sci. Bull.',
+        'science china physics mechanics and astronomy': 'Sci. China Phys. Mech. Astron.',
+        'science china physics, mechanics & astronomy': 'Sci. China Phys. Mech. Astron.',
+        'nuclear science and techniques': 'Nucl. Sci. Tech.',
+        'communications in theoretical physics': 'Commun. Theor. Phys.',
+
+        // === Nature 系列 ===
+        'nature': 'Nature',
+        'nature physics': 'Nat. Phys.',
+        'nature reviews physics': 'Nat. Rev. Phys.',
+        'nature communications': 'Nat. Commun.',
+        'scientific reports': 'Sci. Rep.',
+        'communications physics': 'Commun. Phys.',
+        'science': 'Science',
+
+        // === 其他 ===
+        'the journal of chemical physics': 'J. Chem. Phys.',
+        'journal of physics: conference series': 'J. Phys.: Conf. Ser.',
+        'physica scripta': 'Phys. Scr.',
+        'physics of atomic nuclei': 'Phys. At. Nucl.',
+        'physics of particles and nuclei': 'Phys. Part. Nucl.',
+        'physics of particles and nuclei letters': 'Phys. Part. Nucl. Lett.',
+        'bulletin of the russian academy of sciences physics': 'Bull. Russ. Acad. Sci. Phys.',
+        'acta physica polonica b': 'Acta Phys. Pol. B',
+        'acta physica sinica': 'Acta Phys. Sin.',
+        'pramana': 'Pramana',
+        'journal of the physical society of japan': 'J. Phys. Soc. Jpn.',
+        'journal of the korean physical society': 'J. Korean Phys. Soc.',
+        'journal of physics a': 'J. Phys. A',
+        'journal of physics b': 'J. Phys. B',
+        'journal of physics d': 'J. Phys. D',
+        'modern physics letters a': 'Mod. Phys. Lett. A',
+        'international journal of modern physics e': 'Int. J. Mod. Phys. E',
+        'international journal of modern physics a': 'Int. J. Mod. Phys. A',
+        'atoms': 'Atoms',   // MDPI open access journal
+        'universe': 'Universe',
+        'symmetry': 'Symmetry',
+        'annual review of nuclear and particle science': 'Ann. Rev. Nucl. Part. Sci.',
+        'reports on progress in physics': 'Rept. Prog. Phys.',
+        'new journal of physics': 'New J. Phys.',
+        'journal of physics a: mathematical and theoretical': 'J. Phys. A',
+        'journal of physics: condensed matter': 'J. Phys. Condens. Matter',
+        'the astrophysical journal': 'Astrophys. J.',
+
+        // === 会议/DAE ===
+        'proceedings of the dae symp. on nucl. phys': 'Proc. DAE Symp. Nucl. Phys.',
+        'proceedings of the dae symp. on nucl. phys.': 'Proc. DAE Symp. Nucl. Phys.',
+        'aip conference proceedings': 'AIP Conf. Proc.',
+        'epj web of conferences': 'EPJ Web Conf.',
+        'acta physica polonica b proceedings supplement': 'Acta Phys. Pol. B Proc. Suppl.',
+
+        // === HEP 高能物理 ===
+        'journal of high energy physics': 'JHEP',
+    };
+
+    function bibAbbrevJournal(v) {
+        if (!BIB_JOURNAL_ABBREV) return v;
+        const open = v.startsWith('{') ? '{' : (v.startsWith('"') ? '"' : '');
+        const close = open === '{' ? '}' : (open === '"' ? '"' : '');
+        const inner = (open && v.endsWith(close)) ? v.slice(1, -1) : v;
+        const key = inner.trim().replace(/\s+/g, ' ').toLowerCase().replace(/^the\s+/, '');
+        let hit = BIB_JOURNAL_MAP[key] || BIB_JOURNAL_MAP['the ' + key];
+        if (!hit && key.includes(':')) {      // 出版商的长刊名（如 NIM-A 的 ": Accelerators, Spectrometers, ..."）按冒号前一段再查
+            const short = key.split(':')[0].trim();
+            hit = BIB_JOURNAL_MAP[short] || BIB_JOURNAL_MAP['the ' + short];
+        }
+        if (!hit) return v;                                  // 表里没有 → 保留原名（不猜）
+        return open + hit + close;
+    }
+
+
+    // ---- title 里的 MathML（APS 近年 Crossref 记录常见，实测近期 APS 论文约 28% 命中）→ 可读文本 ----
+    // 'latex' → $^{254}\mathrm{No}$ / $\mu$ / $T_c$；'plain' → 254No / μ / Tc；'off' → 保持 bibtex.org 原样（带 MathML）
+    const BIB_TITLE_MATH = 'latex';   // 默认转 LaTeX 数学；'plain' = 纯文本（254No / μ）；'off' = 不处理
+    const BIB_MO_MAP = { '−': '-', '–': '-', '×': '\\times ', '±': '\\pm ', '⋅': '\\cdot ', '·': '\\cdot ',
+        '→': '\\to ', '≥': '\\ge ', '≤': '\\le ', '∞': '\\infty ', '∑': '\\sum ', '∫': '\\int ',
+        '⊥': '\\perp ', '≈': '\\approx ', '≠': '\\neq ', '∂': '\\partial ' };
+    const BIB_MI_MAP = { 'μ': '\\mu', 'µ': '\\mu', 'α': '\\alpha', 'β': '\\beta', 'γ': '\\gamma', 'δ': '\\delta',
+        'ε': '\\epsilon', 'θ': '\\theta', 'λ': '\\lambda', 'ρ': '\\rho', 'σ': '\\sigma', 'τ': '\\tau',
+        'φ': '\\phi', 'χ': '\\chi', 'ψ': '\\psi', 'ω': '\\omega', 'Γ': '\\Gamma', 'Δ': '\\Delta',
+        'Λ': '\\Lambda', 'Σ': '\\Sigma', 'Φ': '\\Phi', 'Ψ': '\\Psi', 'Ω': '\\Omega', 'ℏ': '\\hbar', 'ħ': '\\hbar' };
+
+    function bibTagName(node) { return (node.nodeName || '').replace(/^mml:/i, '').toLowerCase(); }
+
+    function bibMathmlToText(node, mode) {
+        if (node.nodeType === 3) return node.nodeValue || '';
+        if (node.nodeType !== 1) return '';
+        const tag = bibTagName(node);
+        // 只保留有内容的子节点：MathML 原文是缩进排版的，元素之间的空白文本节点会串位（曾导致 msub 的底数丢失）
+        const kids = Array.from(node.childNodes).filter(k => !(k.nodeType === 3 && k.nodeValue.trim() === ''));
+        const inner = () => {
+            let out = '';
+            for (const k of kids) {
+                const piece = bibMathmlToText(k, mode);
+                // 上一段以 \宏名 结尾、下一段以字母开头时补一个空格（否则 \mu + s 会被当成 \mus）
+                if (out && /\\[a-zA-Z]+$/.test(out) && /^[A-Za-z]/.test(piece)) out += ' ';
+                out += piece;
+            }
+            return out;
+        };
+        const braced = (s, p) => (mode === 'latex' && s ? p + '{' + s + '}' : s);
+        const leaf = () => {
+            const v = inner().trim();
+            if (mode !== 'latex') return v;
+            const mv = (node.getAttribute ? node.getAttribute('mathvariant') : '') || '';
+            if (BIB_MI_MAP[v]) return BIB_MI_MAP[v].trim();
+            if (BIB_MO_MAP[v]) return BIB_MO_MAP[v].trim();
+            if (mv === 'normal' && /^[A-Za-z0-9]+$/.test(v)) return '\\mathrm{' + v + '}';   // 原文标了正体（如 μs 的 s）
+            if (/^[A-Za-z]{2,}$/.test(v)) return '\\mathrm{' + v + '}';   // MathML 约定：多字符标识符直立
+            return v;
+        };
+        switch (tag) {
+            case 'math': {
+                const m = inner().replace(/\s+/g, ' ').trim();
+                return mode === 'latex' ? (m ? '$' + m + '$' : '') : m;
+            }
+            case 'mrow': case 'mstyle': case 'mpadded': case 'merror': case 'semantics':
+            case 'mtable': case 'mtr': case 'mtd': case 'span': case 'i': case 'em': case 'b': case 'strong':
+                return inner();
+            case 'mi': case 'mn': case 'mo': case 'mtext':
+                return leaf();
+            case 'msub':  { const c = kids.map(k => bibMathmlToText(k, mode)); return c[0] + braced(c[1], '_'); }
+            case 'msup':  { const c = kids.map(k => bibMathmlToText(k, mode)); return c[0] + braced(c[1], '^'); }
+            case 'msubsup': { const c = kids.map(k => bibMathmlToText(k, mode)); return c[0] + braced(c[1], '_') + braced(c[2], '^'); }
+            case 'mmultiscripts': {
+                const base = bibMathmlToText(kids[0], mode);
+                let post = '', pre = '', preMode = false, i = 1;
+                while (i < kids.length) {
+                    if (bibTagName(kids[i]) === 'mprescripts') { preMode = true; i++; continue; }
+                    const sub = bibMathmlToText(kids[i], mode);
+                    const sup = (i + 1 < kids.length) ? bibMathmlToText(kids[i + 1], mode) : '';
+                    const piece = braced(sub, '_') + braced(sup, '^');
+                    if (preMode) pre += piece; else post += piece;
+                    i += 2;
+                }
+                return pre + base + post;
+            }
+            case 'msqrt': return mode === 'latex' ? '\\sqrt{' + inner() + '}' : inner();
+            case 'mroot': { const c = kids.map(k => bibMathmlToText(k, mode)); return mode === 'latex' ? '\\sqrt[' + c[0] + ']{' + c[1] + '}' : c[1] + c[0]; }
+            case 'mfrac': { const c = kids.map(k => bibMathmlToText(k, mode)); return mode === 'latex' ? '\\frac{' + c[0] + '}{' + c[1] + '}' : c[0] + '/' + c[1]; }
+            case 'mover': { const c = kids.map(k => bibMathmlToText(k, mode)); return mode === 'latex' ? '\\overset{' + c[1] + '}{' + c[0] + '}' : c[0] + c[1]; }
+            case 'munder': { const c = kids.map(k => bibMathmlToText(k, mode)); return mode === 'latex' ? '\\underset{' + c[1] + '}{' + c[0] + '}' : c[0] + c[1]; }
+            case 'munderover': { const c = kids.map(k => bibMathmlToText(k, mode)); return mode === 'latex' ? '\\underset{' + c[1] + '}{\\overset{' + c[2] + '}{' + c[0] + '}}' : c[0] + c[1] + c[2]; }
+            case 'mspace': return ' ';
+            case 'annotation': case 'annotation-xml': case 'mprescripts': case 'none': return '';
+            default: return inner();
+        }
+    }
+
+    function bibCleanTitle(v) {
+        if (BIB_TITLE_MATH === 'off') return v;
+        if (!/<(?:mml:)?(?:math|mi|mn|mo|mrow|msub|msup|msubsup|mfrac|msqrt|mroot|mmultiscripts|mtext|sub|sup)\b/i.test(v)) return v;
+        const wrapped = /^\{[\s\S]*\}$/.test(v);
+        const body = wrapped ? v.slice(1, -1) : v;
+        // Crossref 把属性里的双引号写成了中文弯引号，XML 解析前先还原；mml: 前缀缺命名空间时补上
+        let xml = body.replace(/[\u201c\u201d]/g, '"');
+        if (/<\s*mml:/i.test(xml) && !/xmlns:mml/i.test(xml)) {
+            xml = xml.replace(/<\s*mml:math/i, '<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"');
+        }
+        let doc;
+        try { doc = new DOMParser().parseFromString('<r>' + xml + '</r>', 'application/xml'); }
+        catch (e) { return v; }
+        if (!doc || !doc.documentElement || doc.getElementsByTagName('parsererror').length) return v;
+        const root = doc.documentElement;
+        let clean = Array.from(root.childNodes).map(n => bibMathmlToText(n, BIB_TITLE_MATH)).join('');
+        clean = clean.replace(/\s+/g, ' ')
+                     .replace(/\s+([,:;])/g, '$1')        // 数学块后残留的空格（"No : A touchstone" → "No: A touchstone"）
+                     .replace(/([A-Za-z0-9])-\s+(?=\S)/g, '$1-')  // "Sub- μs" / "High- Q" → 连字符右侧不留空格
+                     .replace(/\$\s*-\s*/g, '$-')         // "$g$ -Wave" → "$g$-Wave"
+                     .replace(/\s*-\s*\$/g, '-$')         // "High- $Q$" → "High-$Q$"
+                     .trim();
+        if ((clean.match(/\$/g) || []).length % 2) return v;                  // $ 不配对 → 放弃
+        if (clean.split('{').length !== clean.split('}').length) return v;    // 花括号失衡 → 放弃
+        return wrapped ? '{' + clean + '}' : clean;
+    }
+
+
+    function bibEntryToText(entry, key, keepall, journalOverride) {
+        const rank = name => { const i = BIB_FIELD_ORDER.indexOf(name); return i === -1 ? BIB_FIELD_ORDER.length : i; };
+        const fields = entry.fields.filter(f => keepall || !BIB_DROP.has(f.name))
+            .sort((a, b) => rank(a.name) - rank(b.name));
+        const width = Math.max(0, ...fields.map(f => f.name.length));
+        const body = fields.map(f => '  ' + f.name.padEnd(width) + ' = ' + bibNormField(f.name, f.value, journalOverride)).join(',\n');
+        return '@' + entry.type + '{' + key + ',\n' + body + '\n}';
+    }
+
+    function bibExtractId(text) {   // DOI 或 arXiv ID → DOI（与 bibtex.org 同规则）
+        const t = text.trim().replace(/^<|>$/g, '');
+        if (!t) return null;
+        const m = /10\.\d{4,9}\/\S+/.exec(decodeURIComponent(t));
+        if (m) return m[0].replace(/[.,;]+$/, '');
+        const r = /(?:arxiv\.org\/(?:abs|pdf)\/|arxiv:\s*)?(\d{4}\.\d{4,5})(?:v\d+)?/i.exec(t)
+               || /(?:arxiv\.org\/(?:abs|pdf)\/|arxiv:\s*)([a-z\-]+(?:\.[A-Z]{2})?\/\d{7})/i.exec(t);
+        return r ? '10.48550/arXiv.' + r[1] : null;
+    }
+
+    function convertBibtex(rawTexts, keystyle, keepall, journals) {
+        const used = new Map(), texts = [];
+        rawTexts.forEach((raw, i) => {
+            const journalOverride = (journals && journals[i]) || null;
+            bibParse(raw).forEach(e => {
+                let k = bibMakeKey(e, keystyle);
+                const seen = used.get(k) || 0;
+                used.set(k, seen + 1);
+                if (seen) k += String.fromCharCode(97 + seen);
+                texts.push(bibEntryToText(e, k, keepall, journalOverride));
+            });
+        });
+        return texts.join('\n\n');
+    }
+
+    async function fetchDoiBibtex(doi) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 15000);
+        try {
+            const r = await fetch('https://doi.org/' + doi.split('/').map(encodeURIComponent).join('/'),
+                { headers: { Accept: 'application/x-bibtex; charset=utf-8' }, signal: ctrl.signal });
+            if (r.status === 404) throw new Error('DOI 不存在');
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const text = await r.text();
+            if (!text.trimStart().startsWith('@')) throw new Error('未返回 BibTeX');
+            return text;
+        } finally { clearTimeout(timer); }
+    }
+
+    // 期刊缩写的权威来源：INSPIRE。①按 DOI 查文献记录（最准，直接是这篇的刊名）；
+    // ②文献没收录（凝聚态/AMO 的 PRL、非 HEP/NP 期刊）时，用记录里的 ISSN 查 INSPIRE 期刊库；
+    // ③仍没有则退回本地 BIB_JOURNAL_MAP；④最后保留出版商全名（不猜）。
+    async function fetchInspireJournal(doi) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 12000);
+        try {
+            const r = await fetch('https://inspirehep.net/api/literature?q=doi:' + encodeURIComponent(doi) + '&fields=publication_info&size=1',
+                { signal: ctrl.signal });
+            if (!r.ok) return null;
+            const j = await r.json();
+            const hit = ((j.hits || {}).hits || [])[0];
+            const pi = hit && hit.metadata && (hit.metadata.publication_info || [])[0];
+            const t = pi && pi.journal_title;
+            return t ? bibInspireSpacing(t) : null;
+        } catch (e) { return null; }
+        finally { clearTimeout(timer); }
+    }
+
+    // Crossref 的 BibTeX 各出版商都带 ISSN（实测 PLB/NPA/EPJA/JHEP/Medical Physics/Nature 都有）
+    function bibGetIssn(raw) {
+        const m = /ISSN\s*=\s*[{"]([^}"]+)[}"]/.exec(raw);
+        return m ? m[1].split(/[\s,]+/)[0] : null;
+    }
+
+    async function fetchInspireJournalByIssn(issn) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 12000);
+        try {
+            const r = await fetch('https://inspirehep.net/api/journals?q=' + encodeURIComponent(issn) + '&size=5',
+                { signal: ctrl.signal });
+            if (!r.ok) return null;
+            const j = await r.json();
+            const hits = ((j.hits || {}).hits || []);
+            for (const h of hits) {
+                const t = h.metadata && h.metadata.short_title;
+                if (t) return bibInspireSpacing(t);
+            }
+            return null;
+        } catch (e) { return null; }
+        finally { clearTimeout(timer); }
+    }
+
+    doiOrgButton.addEventListener('click', async function() {
+        const tokens = doiInput.value.split(/\s+/).filter(x => x && !/^(doi|arxiv):?$/i.test(x));
+        if (!tokens.length) { alert('请输入DOI或arXiv ID'); return; }
+        const btn = this, old = btn.textContent;
+        btn.disabled = true; btn.textContent = '查询中…';
+        resultSection.style.display = 'block';
+        generatedUrl.textContent = '正在从 doi.org 取 BibTeX…';
+        bibtexDisplay.style.display = 'none';
+        const raws = [], journals = [], errs = [];
+        for (const token of tokens) {                      // 串行，避免并发被注册机构限流
+            const id = bibExtractId(token);
+            if (!id) { errs.push(token + ' — 不是 DOI 或 arXiv ID'); continue; }
+            try {
+                const [raw, jr] = await Promise.all([fetchDoiBibtex(id), fetchInspireJournal(id)]);
+                let journal = jr;
+                if (!journal) {                            // 文献库没收录 → 用 ISSN 查 INSPIRE 期刊库
+                    const issn = bibGetIssn(raw);
+                    if (issn) journal = await fetchInspireJournalByIssn(issn);
+                }
+                raws.push(raw); journals.push(journal);
+            } catch (e) { errs.push(token + ' — ' + e.message); }
+        }
+        btn.disabled = false; btn.textContent = old;
+        if (!raws.length) { generatedUrl.textContent = '取回失败：' + errs.join('；'); return; }
+        let out;
+        try { out = convertBibtex(raws, BIB_KEYSTYLE, false, journals); }
+        catch (e) { out = raws.join('\n\n'); errs.push('重排失败（' + e.message + '），已输出 doi.org 原始文本'); }
+        const insp = journals.filter(Boolean).length;
+        showBibtex(out, 'doi.org（bibtex.org 风格' + (raws.length > 1 ? '，' + raws.length + ' 条' : '') +
+            '；期刊缩写来自 INSPIRE ' + insp + '/' + raws.length + '）');
+        if (errs.length) { arxivInfo.textContent = '⚠️ ' + errs.join('\n'); arxivInfo.style.display = 'block'; }
+    });
+
+    async function probeSiteReachability(origin, timeoutMs) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            // opaque 响应只能证明浏览器完成了跨域网络请求，不能读取 HTTP 状态或页面内容。
+            await fetch(origin + '/favicon.ico?connectivity-check=' + Date.now(), {
+                method: 'GET', mode: 'no-cors', cache: 'no-store', signal: controller.signal
+            });
+            return true;
+        } catch (e) { return false; }
+        finally { clearTimeout(timer); }
+    }
+
+    scihubButton.addEventListener('click', async function() {
         const doi = cleanDoi(doiInput.value);
         if (!doi) { alert('请输入DOI'); return; }
-        const url = 'https://harvest.aps.org/v2/journals/articles/' + doi + '/fulltext';
-        generatedUrl.textContent = url; resultSection.style.display = 'block'; window.open(url, '_blank');
-    });
-
-    // Sci-Hub / LibGen
-    scihubButton.addEventListener('click', async function() {
-        const doi = doiInput.value.trim();
-        if (!doi) { alert('请输入DOI'); return; }
-        const domains = ['https://sci-hub.se','https://sci-hub.st','https://sci-hub.ru'];
-        let d = domains[0];
-        for (const dom of domains) { try { const c = new AbortController(); setTimeout(()=>c.abort(),2000); await fetch(dom,{method:'HEAD',mode:'no-cors',signal:c.signal}); d=dom; break; } catch(e){} }
-        const url = d + '/' + doi;
-        generatedUrl.textContent = url; resultSection.style.display = 'block'; window.open(url, '_blank');
+        clearFulltextCandidate();
+        const domains = ['https://sci-hub.se', 'https://sci-hub.st', 'https://sci-hub.ru'];
+        const old = this.textContent;
+        this.disabled = true; this.textContent = '正在检测站点…';
+        resultSection.style.display = 'block';
+        generatedUrl.textContent = '正在检测候选站点的网络连通性…';
+        const probes = domains.map(domain => probeSiteReachability(domain, 5000).then(ok => {
+            if (!ok) throw new Error('unreachable');
+            return domain;
+        }));
+        let reachable = '';
+        try { reachable = await Promise.any(probes); }
+        catch (e) {}
+        finally { this.disabled = false; this.textContent = old; }
+        if (!reachable) {
+            generatedUrl.textContent = '当前浏览器未检测到可连接的 Sci-Hub 候选站点。未自动打开任何页面。';
+            return;
+        }
+        const encodedDoi = doi.split('/').map(encodeURIComponent).join('/');
+        const url = reachable + '/' + encodedDoi;
+        generatedUrl.textContent = '站点连通性检测通过，已打开：\n' + url +
+            '\n注意：这只表示站点可以建立连接，不代表站内已经自动加载 PDF。';
+        openExternal(url);
     });
     libgenButton.addEventListener('click', function() {
         if (!doiInput.value.trim()) { alert('请输入DOI'); return; }
+        clearFulltextCandidate();
         const url = 'https://libgen.gl/index.php?req=' + encodeURIComponent(doiInput.value.trim());
-        generatedUrl.textContent = url; resultSection.style.display = 'block'; window.open(url, '_blank');
+        generatedUrl.textContent = url; resultSection.style.display = 'block'; openExternal(url);
     });
 
     // Copy
@@ -670,14 +1682,19 @@ document.addEventListener('DOMContentLoaded', function() {
     function copy(t, btn) {
         navigator.clipboard.writeText(t).then(function() {
             const o = btn.textContent;
-            btn.textContent = '已复制!'; btn.style.backgroundColor = '#27ae60';
-            setTimeout(() => { btn.textContent = o; btn.style.backgroundColor = '#2ecc71'; }, 2000);
+            btn.textContent = '已复制'; btn.style.backgroundColor = '#087f5b';
+            setTimeout(() => { btn.textContent = o; btn.style.backgroundColor = ''; }, 1600);
+        }).catch(function() {
+            const o = btn.textContent; btn.textContent = '复制失败';
+            setTimeout(() => { btn.textContent = o; }, 1600);
         });
     }
 
     // Enter
-    doiInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') doi2bibButton.click(); });
-    searchTitle.addEventListener('keypress', function(e) { if (e.key === 'Enter') searchButton.click(); });
+    doiInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); doiOrgButton.click(); } });
+    [searchTitle, searchAuthor, searchYear].forEach(input => input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); searchButton.click(); }
+    }));
 
     // ==================== 时钟 ====================
     const dt = document.getElementById('datetimeDisplay');
@@ -705,9 +1722,12 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderHistory() {
         const h = loadHistory();
         const div = document.getElementById('doiHistory');
-        div.innerHTML = h.map(d => '<span class="tag" data-doi="' + d.replace(/"/g,'&quot;') + '">' + d.replace(/"/g,'&quot;') + '</span>').join('');
-        div.querySelectorAll('.tag').forEach(el => {
-            el.addEventListener('click', function() { doiInput.value = this.dataset.doi; doi2bibButton.click(); });
+        document.getElementById('doiHistoryWrap').hidden = h.length === 0;
+        div.replaceChildren();
+        h.forEach(doi => {
+            const el = document.createElement('button'); el.type = 'button'; el.className = 'tag'; el.textContent = doi; el.dataset.doi = doi;
+            el.addEventListener('click', function() { doiInput.value = this.dataset.doi; doiOrgButton.click(); });
+            div.append(el);
         });
     }
     function addHistory(doi) {
@@ -726,18 +1746,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const reader = new FileReader();
         reader.onload = function(ev) {
             const content = ev.target.result;
-            const entries = content.split(/\n(?=@\w+)/).filter(s => s.trim().length > 0);
+            const entries = content.split(/\n(?=\s*@[A-Za-z])/).filter(s => s.trim().length > 0);
             let added = 0, skipped = 0;
             entries.forEach(entry => {
-                const key = parseKey(entry);
-                if (!key) return;
-                if (accumulatedBibtex.some(e => parseKey(e) === key)) { skipped++; return; }
-                accumulatedBibtex.push(entry);
-                added++;
+                const outcome = addToLibrary(entry);
+                added += outcome.addedCount;
+                skipped += outcome.duplicateCount;
             });
-            exportButton.disabled = false;
-            exportButton.textContent = '导出 .bib (' + accumulatedBibtex.length + ' 条)';
-            batchResults.innerHTML = '<div class="search-result" style="border-left:3px solid #2ecc71;">导入完成: 新增 ' + added + ' 条' + (skipped ? ', 跳过 ' + skipped + ' 条重复' : '') + '</div>';
+            const note = document.createElement('div'); note.className = 'search-result'; note.style.borderLeft = '3px solid #087f5b';
+            note.textContent = '导入完成：新增 ' + added + ' 条' + (skipped ? '，跳过 ' + skipped + ' 条重复' : '');
+            batchResults.replaceChildren(note);
             batchProgress.style.display = 'none';
         };
         reader.readAsText(file);
@@ -746,20 +1764,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ==================== 引用预览 ====================
     function formatCitation(bibtex, style) {
-        const t = bibtex.match(/title\s*=\s*["{]([^"}]+)["}]/);
-        const a = bibtex.match(/author\s*=\s*["{]([^"}]+)["}]/);
-        const j = bibtex.match(/journal\s*=\s*["{]([^"}]+)["}]/);
-        const v = bibtex.match(/volume\s*=\s*["{](\d+)["}]/);
-        const n = bibtex.match(/number\s*=\s*["{](\d+)["}]/);
-        const p = bibtex.match(/pages\s*=\s*["{]([^"}]+)["}]/);
-        const y = bibtex.match(/year\s*=\s*["{](\d+)["}]/);
-        const d = bibtex.match(/doi\s*=\s*["{]([^"}]+)["}]/);
+        let entry;
+        try { entry = bibParse(bibtex)[0]; } catch (e) { return '无法解析该 BibTeX 条目'; }
+        if (!entry) return '无法解析该 BibTeX 条目';
         const ar = extractArxiv(bibtex);
 
         // 解析作者
         let authors = '';
-        if (a) {
-            const names = a[1].split(' and ').map(n => n.trim().replace(/[{}"]/g,''));
+        const authorValue = bibField(entry, 'author');
+        if (authorValue) {
+            const names = authorValue.split(/\s+and\s+/).map(n => n.trim());
             // 转换为 "Y. L. Yang" 格式
             const formatted = names.map(n => {
                 const parts = n.split(',');
@@ -775,13 +1789,13 @@ document.addEventListener('DOMContentLoaded', function() {
             else authors = formatted[0] + ' et al.';
         }
 
-        const title = t ? t[1].replace(/[{}\\]/g,'') : '';
-        const journal = j ? j[1] : '';
-        const volume = v ? v[1] : '';
-        const number = n ? n[1] : '';
-        const pages = p ? p[1].replace(/--/g,'–') : '';
-        const year = y ? y[1] : '';
-        const doi = d ? d[1] : '';
+        const title = bibField(entry, 'title');
+        const journal = bibField(entry, 'journal');
+        const volume = bibField(entry, 'volume');
+        const number = bibField(entry, 'number');
+        const pages = bibField(entry, 'pages').replace(/--/g,'–');
+        const year = bibField(entry, 'year');
+        const doi = bibField(entry, 'doi');
 
         if (style === 'aps') {
             // Phys. Rev. C 107, 024308 (2023)
@@ -839,10 +1853,68 @@ document.addEventListener('DOMContentLoaded', function() {
         if (text) copy(text, this);
     });
 
-    // ==================== 背景特效 ====================
-    // 已由 Three.js 星空换成 DeepSeek Harness 同款两层背景（WebGL2 流体 + 2D 网格），
-    // 实现在页面末尾的独立 <script> 块中（layer 1 fluid / layer 2 grid）。
+    // ==================== Three.js ====================
+    if (window.THREE && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const c = document.getElementById('three-container');
+    const sc = new THREE.Scene();
+    const cam = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 2000);
+    cam.position.z = 300;
+    const ren = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    ren.setSize(window.innerWidth, window.innerHeight);
+    ren.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    c.appendChild(ren.domElement);
 
+    const N = 2000;
+    const g = new THREE.BufferGeometry();
+    const pos = new Float32Array(N*3), col = new Float32Array(N*3);
+    for (let i = 0; i < N; i++) {
+        const r = 50 + Math.random() * 350, th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+        pos[i*3] = r * Math.sin(ph) * Math.cos(th);
+        pos[i*3+1] = r * Math.sin(ph) * Math.sin(th) * 0.4;
+        pos[i*3+2] = r * Math.cos(ph);
+        const t = Math.random();
+        col[i*3] = 0.3 + t*0.4; col[i*3+1] = 0.4 + (1-t)*0.4; col[i*3+2] = 0.8 + t*0.2;
+    }
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const stars = new THREE.Points(g, new THREE.PointsMaterial({ size: 2.5, sizeAttenuation: true, transparent: true, opacity: 0.8, vertexColors: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    sc.add(stars);
+
+    function makeRing(r, y, color, n, sz) {
+        const gg = new THREE.BufferGeometry(); const pp = new Float32Array(n*3);
+        for (let i = 0; i < n; i++) { const a = (i/n)*Math.PI*2; pp[i*3]=Math.cos(a)*r; pp[i*3+1]=y+(Math.random()-0.5)*2; pp[i*3+2]=Math.sin(a)*r; }
+        gg.setAttribute('position', new THREE.BufferAttribute(pp, 3));
+        return new THREE.Points(gg, new THREE.PointsMaterial({ size: sz, color: color, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+    }
+    const o1 = makeRing(120, -20, 0x4a9eff, 80, 2.0);
+    const o2 = makeRing(160, 10, 0x8e44ad, 60, 1.5);
+    const o3 = makeRing(90, 30, 0x2ecc71, 50, 1.2);
+    const o4 = makeRing(200, -40, 0xe74c3c, 40, 1.0);
+    sc.add(o1); sc.add(o2); sc.add(o3); sc.add(o4);
+
+    let mx = 0, my = 0;
+    document.addEventListener('mousemove', e => { mx = (e.clientX/window.innerWidth)*2-1; my = -(e.clientY/window.innerHeight)*2+1; });
+    window.addEventListener('resize', () => { cam.aspect = window.innerWidth/window.innerHeight; cam.updateProjectionMatrix(); ren.setSize(window.innerWidth, window.innerHeight); });
+
+    let animationFrame = 0;
+    function anim() {
+        animationFrame = requestAnimationFrame(anim);
+        stars.rotation.y += 0.0003; stars.rotation.x += 0.0001;
+        o1.rotation.y += 0.008; o1.rotation.x += 0.002;
+        o2.rotation.y -= 0.005; o2.rotation.z += 0.003;
+        o3.rotation.y += 0.01; o3.rotation.x += 0.004;
+        o4.rotation.y -= 0.003; o4.rotation.z += 0.002;
+        cam.position.x += (mx*50 - cam.position.x) * 0.02;
+        cam.position.y += (my*30 - cam.position.y) * 0.02;
+        cam.lookAt(sc.position);
+        ren.render(sc, cam);
+    }
+    anim();
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) { cancelAnimationFrame(animationFrame); animationFrame = 0; }
+        else if (!animationFrame) anim();
+    });
+    }
     // ==================== 深色模式 ====================
     const tt = document.getElementById('themeToggle');
     if (localStorage.getItem('darkMode') === 'true') { document.body.classList.add('dark-mode'); tt.textContent = '☀️'; }
@@ -852,581 +1924,6 @@ document.addEventListener('DOMContentLoaded', function() {
         tt.textContent = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
     });
 });
-</script>
-<script>
-/* ================================================================
- * 页面背景：DeepSeek Harness 同款两层特效（原样搬自 deepseek_harness/index.html）
- *   layer 1  #fluid : WebGL2 flowmap + 域噪声流体（深蓝金色流动，鼠标可"涂抹"）
- *   layer 2  #grid  : 90px 2D 粒子网格（鼠标排斥 + 弹簧回位）
- * 参数均为官网实测值，勿随手改；?demo=1 鼠标自动游走，?forceGrid=1 强制显示网格（触摸/无头环境调试用）
- * ================================================================ */
-/* ================================================================
- * 层 1：WebGL2 流体背景（还原自 deepseek.com/harness page.js）
- * 原理：低分辨率 flowmap ping-pong 纹理，R 通道存"影响力"，
- *       GB 通道存速度方向（0.5 为中心）；鼠标在其上"涂抹"，
- *       每帧按 u_decay 衰减。最终由域噪声（fbm+snoise）流体
- *       shader 渲染出深蓝金色流动效果，叠加 bloom / 虚光 / 光源。
- * ================================================================ */
-(function () {
-  const canvas = document.getElementById('fluid');
-  const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: false, powerPreference: 'low-power' });
-  if (!gl) { console.error('需要 WebGL2'); return; }
-
-  /* ---- 官网实际参数 ---- */
-  const params = {
-    type: 'fluid',
-    mouseRadius: .09, mouseStrength: 1.8, mouseSmoothing: .1, mouseVelocity: .2,
-    decay: .925, distortBoost: 2.2, noiseBoost: .3, swirlBoost: .8,
-    glowIntensity: .13, glowColors: ['#fff7d1', '#538dca', '#2d448b'],
-    speed: 28, distortion: 18, swirl: 20, swirlIterations: 12,
-    scale: 1.77, rotation: 15, proportion: 60, softness: 80, shapeScale: 0,
-    offsetX: -124, offsetY: -48, grain: .005,
-    colors: ['#000000', '#1A3870', '#204a7e', '#eed8aa', '#000000'],
-    lightX: .89, lightY: .46, lightCore: .14, lightHalo: .2, vignette: .38,
-    lightFollow: .63, bloomThreshold: .61, bloomRange: .18, bloomStrength: .4
-  };
-
-  const hex2rgb = h => {
-    const s = h.replace('#', '');
-    return [parseInt(s.slice(0,2),16)/255, parseInt(s.slice(2,4),16)/255, parseInt(s.slice(4,6),16)/255];
-  };
-
-  /* ---- shader 编译 ---- */
-  const VERT = `#version 300 es
-  in vec4 a_position;
-  out vec2 vUv;
-  void main() {
-    vUv = a_position.xy * 0.5 + 0.5;
-    gl_Position = a_position;
-  }`;
-
-  /* Pass A：flowmap 更新（在 1/4 低分辨率上做） */
-  const FLOW_FRAG = `#version 300 es
-  precision mediump float;
-  in vec2 vUv;
-  uniform sampler2D u_prev;
-  uniform vec2 u_mouse;
-  uniform vec2 u_velocity;
-  uniform float u_brushRadius;
-  uniform float u_brushStrength;
-  uniform float u_decay;
-  out vec4 fragColor;
-
-  void main() {
-    vec4 prev = texture(u_prev, vUv);
-
-    prev.r *= u_decay;
-    prev.gb = mix(vec2(0.5), prev.gb, u_decay);
-
-    float dist = distance(vUv, u_mouse);
-
-    float influence = exp(-dist * dist / (u_brushRadius * u_brushRadius * 0.5));
-    influence = max(0.0, influence - 0.01);
-
-    float speed = length(u_velocity);
-    float presenceStrength = u_brushStrength * 0.3;
-    float velBonus = min(speed * 3.0, 0.7) * u_brushStrength;
-    float totalStrength = presenceStrength + velBonus;
-
-    prev.r = max(prev.r, influence * totalStrength);
-    float blendAmt = influence * min(totalStrength, 0.4) * 0.3;
-    prev.g = mix(prev.g, clamp(u_velocity.x * 2.0 + 0.5, 0.0, 1.0), blendAmt);
-    prev.b = mix(prev.b, clamp(u_velocity.y * 2.0 + 0.5, 0.0, 1.0), blendAmt);
-
-    fragColor = prev;
-  }`;
-
-  /* Pass B：域噪声流体渲染（全分辨率） */
-  const FLUID_FRAG = `#version 300 es
-  precision mediump float;
-  in vec2 vUv;
-  uniform float u_time;
-  uniform vec2 u_resolution;
-  uniform vec3 u_c1, u_c2, u_c3, u_c4, u_c5;
-  uniform float u_scale;
-  uniform vec2 u_offset;
-  uniform float u_grain;
-  uniform float u_speed;
-  uniform sampler2D u_flowmap;
-  uniform float u_distortBoost;
-  uniform float u_swirlBoost;
-  uniform float u_glowIntensity;
-  uniform vec3 u_glowColor1;
-  uniform vec3 u_glowColor2;
-  uniform vec3 u_glowColor3;
-  uniform vec2 u_lightPos;
-  uniform float u_lightCore;
-  uniform float u_lightHalo;
-  uniform float u_vignette;
-  uniform float u_bloomThreshold;
-  uniform float u_bloomRange;
-  uniform float u_bloomStrength;
-  out vec4 fragColor;
-
-  vec3 mod289v3(vec3 x){return x-floor(x*(1./289.))*289.;}
-  vec4 mod289v4(vec4 x){return x-floor(x*(1./289.))*289.;}
-  vec4 permute(vec4 x){return mod289v4(((x*34.)+1.)*x);}
-  vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-.85373472095314*r;}
-
-  float snoise(vec3 v){
-    const vec2 C=vec2(1./6.,1./3.);
-    const vec4 D=vec4(0.,.5,1.,2.);
-    vec3 i=floor(v+dot(v,C.yyy));
-    vec3 x0=v-i+dot(i,C.xxx);
-    vec3 g=step(x0.yzx,x0.xyz);
-    vec3 l=1.-g;
-    vec3 i1=min(g.xyz,l.zxy);
-    vec3 i2=max(g.xyz,l.zxy);
-    vec3 x1=x0-i1+C.xxx;
-    vec3 x2=x0-i2+C.yyy;
-    vec3 x3=x0-D.yyy;
-    i=mod289v3(i);
-    vec4 p=permute(permute(permute(i.z+vec4(0.,i1.z,i2.z,1.))+i.y+vec4(0.,i1.y,i2.y,1.))+i.x+vec4(0.,i1.x,i2.x,1.));
-    float n_=.142857142857;
-    vec3 ns=n_*D.wyz-D.xzx;
-    vec4 j=p-49.*floor(p*ns.z*ns.z);
-    vec4 x_=floor(j*ns.z);
-    vec4 y_=floor(j-7.*x_);
-    vec4 x=x_*ns.x+ns.yyyy;
-    vec4 y=y_*ns.x+ns.yyyy;
-    vec4 h=1.-abs(x)-abs(y);
-    vec4 b0=vec4(x.xy,y.xy);
-    vec4 b1=vec4(x.zw,y.zw);
-    vec4 s0=floor(b0)*2.+1.;
-    vec4 s1=floor(b1)*2.+1.;
-    vec4 sh=-step(h,vec4(0.));
-    vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy;
-    vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
-    vec3 p0=vec3(a0.xy,h.x);vec3 p1=vec3(a0.zw,h.y);
-    vec3 p2=vec3(a1.xy,h.z);vec3 p3=vec3(a1.zw,h.w);
-    vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
-    p0*=norm.x;p1*=norm.y;p2*=norm.z;p3*=norm.w;
-    vec4 m=max(.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.);
-    m=m*m;
-    return 42.*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
-  }
-
-  float hash(vec2 p){
-    vec3 p3=fract(vec3(p.xyx)*.1031);
-    p3+=dot(p3,p3.yzx+33.33);
-    return fract((p3.x+p3.y)*p3.z);
-  }
-
-  float fbm(vec3 p){
-    float v=0.,amp=.6;vec3 shift=vec3(100.);
-    for(int i=0;i<1;i++){v+=amp*snoise(p);p=p*2.+shift;amp*=.4;}
-    return v;
-  }
-
-  float fluidNoise(vec2 uv,float t){
-    float n1=fbm(vec3(uv*.6,t*.06));
-    float n2=fbm(vec3(uv*.6+5.2,t*.06+1.3));
-    vec2 w1=vec2(n1,n2)*.6;
-    float n3=fbm(vec3((uv+w1)*.7+1.7,t*.05+3.1));
-    float n4=fbm(vec3((uv+w1)*.7+9.2,t*.05+5.7));
-    vec2 w2=vec2(n3,n4)*.5;
-    return fbm(vec3((uv+w1+w2)*.5,t*.04));
-  }
-
-  vec2 curlish(vec2 uv,float t){
-    float eps=.02;
-    float n=snoise(vec3(uv*.8,t));
-    float nx=snoise(vec3((uv+vec2(eps,0.))*.8,t));
-    float ny=snoise(vec3((uv+vec2(0.,eps))*.8,t));
-    return vec2(-(ny-n)/eps,(nx-n)/eps)*.003;
-  }
-
-  void main(){
-    float aspect=u_resolution.x/u_resolution.y;
-    vec2 uv=gl_FragCoord.xy/u_resolution;
-    vec2 suv=vec2(uv.x*aspect, uv.y) * u_scale + u_offset;
-    float t=u_time;
-
-    // Mouse interaction via flowmap
-    vec4 flow = texture(u_flowmap, uv);
-    float influence = flow.r;
-    vec2 flowDir = (flow.gb - 0.5) * 2.0;
-
-    // Apply mouse distortion to UV
-    suv += flowDir * influence * u_distortBoost * 0.8;
-    // Apply mouse swirl
-    float swirlAngle = influence * u_swirlBoost * 2.5;
-    float cs = cos(swirlAngle), sn = sin(swirlAngle);
-    vec2 delta = suv - vec2(uv.x * aspect, uv.y) * u_scale;
-    suv += (mat2(cs, sn, -sn, cs) * delta - delta) * influence;
-
-    vec2 curl=curlish(suv,t*.04);
-    vec2 uvD=suv+curl*12.;
-    float f=fluidNoise(uvD,t);
-    float swirl=snoise(vec3(uvD*.8+f*1.5,t*.035))*.5+.5;
-    float n=f*.5+.5;
-    vec3 col=mix(u_c1,u_c2,smoothstep(.2,.5,n));
-    col=mix(col,u_c3,smoothstep(.35,.65,n+swirl*.25));
-    col=mix(col,u_c4,smoothstep(.6,.85,swirl)*.55);
-    col=mix(col,u_c5,smoothstep(.5,.8,n*swirl)*.35);
-
-    // Mouse proximity color shift: 3-color glow blended by distance + noise
-    float glow = smoothstep(0.0, 0.8, influence);
-    float glowNoise = snoise(vec3(uvD * 1.5, t * 0.08)) * 0.5 + 0.5;
-    float glowDist = smoothstep(0.0, 1.0, influence);
-    vec3 glowMix = mix(u_glowColor3, u_glowColor2, glowDist);
-    glowMix = mix(glowMix, u_glowColor1, glowDist * glowNoise);
-    col = mix(col, glowMix, glow * u_glowIntensity);
-
-    if(u_grain>0.0){
-      vec2 flowOffset = (uvD - suv) * u_resolution.y;
-      vec2 gp = floor((gl_FragCoord.xy + flowOffset) / 5.0);
-      float gr=hash(gp)*2.-1.;
-      col+=gr*u_grain;
-    }
-
-    // Self-luminance bloom: bright fluid regions become their own light spots
-    float luma=dot(col,vec3(.299,.587,.114));
-    float bloom=smoothstep(u_bloomThreshold-u_bloomRange,u_bloomThreshold+u_bloomRange,luma);
-    col+=(col*.85+vec3(.15,.145,.13))*bloom*u_bloomStrength;
-
-    // Virtual light source: soft warm core (same side as helm lighting)
-    float ld=length((uv-u_lightPos)*vec2(aspect,1.));
-    float core=exp(-ld*ld*4.5);
-    float halo=exp(-ld*1.8);
-    col+=vec3(1.,.97,.9)*core*u_lightCore+vec3(.72,.8,1.)*halo*u_lightHalo;
-
-    float vig=1.-smoothstep(.35,.75,length(uv-.5));
-    col=mix(col*(1.-u_vignette),col,vig);
-    fragColor=vec4(col,1.);
-  }`;
-
-  const compile = (type, src) => {
-    const s = gl.createShader(type);
-    gl.shaderSource(s, src);
-    gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-      console.error('Shader:', gl.getShaderInfoLog(s));
-      return null;
-    }
-    return s;
-  };
-  const program = (fragSrc) => {
-    const vs = compile(gl.VERTEX_SHADER, VERT);
-    const fs = compile(gl.FRAGMENT_SHADER, fragSrc);
-    if (!fs) return null;
-    const p = gl.createProgram();
-    gl.attachShader(p, vs);
-    gl.attachShader(p, fs);
-    gl.linkProgram(p);
-    return gl.getProgramParameter(p, gl.LINK_STATUS) ? p : (console.error('Link:', gl.getProgramInfoLog(p)), null);
-  };
-
-  const progFlow = program(FLOW_FRAG);
-  const progFluid = program(FLUID_FRAG);
-  if (!progFlow || !progFluid) return;
-
-  const loc = (p, names) => {
-    const o = {};
-    for (const n of names) o[n] = gl.getUniformLocation(p, n);
-    return o;
-  };
-  const Uf = loc(progFlow, ['u_prev','u_mouse','u_velocity','u_brushRadius','u_brushStrength','u_decay']);
-  const UD = loc(progFluid, ['u_time','u_resolution','u_scale','u_offset','u_grain','u_flowmap','u_distortBoost','u_swirlBoost','u_glowIntensity','u_glowColor1','u_glowColor2','u_glowColor3','u_lightPos','u_lightCore','u_lightHalo','u_vignette','u_bloomThreshold','u_bloomRange','u_bloomStrength','u_c1','u_c2','u_c3','u_c4','u_c5']);
-
-  const quad = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
-  const bindQuad = p => {
-    const a = gl.getAttribLocation(p, 'a_position');
-    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-    gl.enableVertexAttribArray(a);
-    gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
-  };
-
-  /* ---- 低分辨率 flowmap 纹理对（ping-pong） ---- */
-  const makeTarget = (w, h, data) => {
-    const tex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    const fbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    return { fbo, tex };
-  };
-
-  /* ---- 状态 ---- */
-  let W = 0, H = 0, FW = 0, FH = 0;
-  let texA, texB, flip = false;
-  const mouse = { x: .5, y: .5, sx: .5, sy: .5, vx: 0, vy: 0 };
-  const dprCap = Math.min(window.devicePixelRatio || 1, 1.5);
-  const init = () => {
-    W = Math.round(canvas.clientWidth * dprCap);
-    H = Math.round(canvas.clientHeight * dprCap);
-    canvas.width = W; canvas.height = H;
-    FW = Math.round(W / 4); FH = Math.round(H / 4);
-    // 初始 flowmap：R=0（无影响），GB=0.5（零速度）
-    const N = new Uint8Array(FW * FH * 4);
-    for (let i = 0; i < FW * FH; i++) { N[4*i] = 0; N[4*i+1] = 128; N[4*i+2] = 128; N[4*i+3] = 255; }
-    texA = makeTarget(FW, FH, N);
-    texB = makeTarget(FW, FH, N);
-  };
-  init();
-
-  const onMove = e => {
-    const r = canvas.getBoundingClientRect();
-    mouse.x = (e.clientX - r.left) / r.width;
-    mouse.y = 1 - (e.clientY - r.top) / r.height;
-  };
-  window.addEventListener('mousemove', onMove);
-
-  // 演示模式：?demo=1 时鼠标自动游走（无需真实鼠标即可看到流动效果）
-  const demoMode = new URLSearchParams(location.search).get('demo') === '1';
-  if (demoMode) {
-    const demoStart = performance.now();
-    setInterval(() => {
-      const t = (performance.now() - demoStart) * .001;
-      const r = canvas.getBoundingClientRect();
-      mouse.x = .5 + .38 * Math.sin(t * .6) * Math.cos(t * .23);
-      mouse.y = .5 + .38 * Math.cos(t * .5) * Math.sin(t * .31);
-      canvas.dispatchEvent(new MouseEvent('mousemove', {
-        clientX: r.left + mouse.x * r.width,
-        clientY: r.top + (1 - mouse.y) * r.height,
-        bubbles: true
-      }));
-    }, 100);
-  }
-
-  const start = performance.now();
-  let last = 0;
-  const FRAME = 1000 / 30;
-
-  const render = now => {
-    requestAnimationFrame(render);
-    const dt = now - last;
-    if (dt < FRAME) return;
-    last = now - (dt % FRAME);
-
-    const W2 = Math.round(canvas.clientWidth * dprCap);
-    const H2 = Math.round(canvas.clientHeight * dprCap);
-    if (W2 !== W || H2 !== H) { W = W2; H = H2; canvas.width = W; canvas.height = H; }
-
-    // 鼠标平滑（官网公式）
-    mouse.sx += (mouse.x - mouse.sx) * params.mouseSmoothing;
-    mouse.sy += (mouse.y - mouse.sy) * params.mouseSmoothing;
-    mouse.vx += ((mouse.x - mouse.sx) * .5 - mouse.vx) * params.mouseVelocity;
-    mouse.vy += ((mouse.y - mouse.sy) * .5 - mouse.vy) * params.mouseVelocity;
-
-    const read = flip ? texA : texB;
-    const write = flip ? texB : texA;
-    flip = !flip;
-
-    /* Pass A：更新 flowmap（低分辨率） */
-    gl.bindFramebuffer(gl.FRAMEBUFFER, write.fbo);
-    gl.viewport(0, 0, FW, FH);
-    gl.useProgram(progFlow);
-    bindQuad(progFlow);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, read.tex);
-    gl.uniform1i(Uf.u_prev, 0);
-    gl.uniform2f(Uf.u_mouse, mouse.sx, mouse.sy);
-    gl.uniform2f(Uf.u_velocity, mouse.vx, mouse.vy);
-    gl.uniform1f(Uf.u_brushRadius, params.mouseRadius);
-    gl.uniform1f(Uf.u_brushStrength, params.mouseStrength);
-    gl.uniform1f(Uf.u_decay, params.decay);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-    /* Pass B：流体渲染（全分辨率） */
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, W, H);
-    gl.useProgram(progFluid);
-    bindQuad(progFluid);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, write.tex);
-    gl.uniform1i(UD.u_flowmap, 0);
-    gl.uniform1f(UD.u_time, (now - start) * .001 * (params.speed / 100));
-    gl.uniform2f(UD.u_resolution, W, H);
-    gl.uniform1f(UD.u_scale, params.scale);
-    gl.uniform2f(UD.u_offset, params.offsetX / 100, params.offsetY / 100);
-    gl.uniform1f(UD.u_grain, params.grain);
-    gl.uniform1f(UD.u_distortBoost, params.distortBoost);
-    gl.uniform1f(UD.u_swirlBoost, params.swirlBoost);
-
-    // 虚拟光源位置：跟随鼠标（lightFollow 权重）
-    const lx = params.lightX + (mouse.sx - params.lightX) * params.lightFollow;
-    gl.uniform2f(UD.u_lightPos, lx, params.lightY);
-    gl.uniform1f(UD.u_lightCore, params.lightCore);
-    gl.uniform1f(UD.u_lightHalo, params.lightHalo);
-    gl.uniform1f(UD.u_vignette, params.vignette);
-    gl.uniform1f(UD.u_bloomThreshold, params.bloomThreshold);
-    gl.uniform1f(UD.u_bloomRange, params.bloomRange);
-    gl.uniform1f(UD.u_bloomStrength, params.bloomStrength);
-    gl.uniform1f(UD.u_glowIntensity, params.glowIntensity);
-
-    const gc = params.glowColors.map(hex2rgb);
-    gl.uniform3f(UD.u_glowColor1, gc[0][0], gc[0][1], gc[0][2]);
-    gl.uniform3f(UD.u_glowColor2, gc[1][0], gc[1][1], gc[1][2]);
-    gl.uniform3f(UD.u_glowColor3, gc[2][0], gc[2][1], gc[2][2]);
-
-    const cols = params.colors.map(hex2rgb);
-    const cl = [UD.u_c1, UD.u_c2, UD.u_c3, UD.u_c4, UD.u_c5];
-    for (let i = 0; i < 5; i++) gl.uniform3f(cl[i], cols[i][0], cols[i][1], cols[i][2]);
-
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  };
-  requestAnimationFrame(render);
-})();
-
-/* ================================================================
- * 层 2：2D 粒子网格（还原自官网 grid 组件）
- * 原理：90px 间距网格点，鼠标 140px 半径内被排斥，
- *       弹簧力拉回原位 + 阻尼，相邻点距离 <20px 才连线。
- * ================================================================ */
-(function () {
-  const canvas = document.getElementById('grid');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  // ?forceGrid=1 可强制启用网格（headless/触摸设备默认会跳过，用于调试）
-  const forceGrid = new URLSearchParams(location.search).get('forceGrid') === '1';
-  if (window.matchMedia('(hover: none), (pointer: coarse)').matches && !forceGrid) return; // 触摸设备跳过
-
-  const lineColor = 'rgba(255, 255, 255,'; // 官网 z-5 层实际为白色
-  const dotColor  = 'rgba(255, 255, 255,';
-  const lineOpacity = .08;
-  const dotOpacity  = .16;
-  const isStatic = false;
-
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  let pts = [], cols = 0, rows = 0, cw = 0, ch = 0;
-  let raf = 0, paused = false;
-
-  const build = () => {
-    cols = Math.ceil(cw / 90) + 1;
-    rows = Math.ceil(ch / 90) + 1;
-    const ox = (cw - (cols - 1) * 90) / 2;
-    const oy = (ch - (rows - 1) * 90) / 2;
-    pts = [];
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols; c++)
-        pts.push({ restX: ox + 90 * c, restY: oy + 90 * r, x: ox + 90 * c, y: oy + 90 * r, vx: 0, vy: 0 });
-  };
-
-  const m = { x: NaN, y: NaN };
-  let resizeTimer = null;
-  let last = 0;
-  const STEP = 1000 / 30;
-
-  const resize = () => {
-    const w = canvas.clientWidth, h = canvas.clientHeight;
-    if (w === 0 || h === 0) return; // 布局未就绪，等下一帧
-    if (w === cw && h === ch && pts.length > 0) return;
-    cw = w; ch = h;
-    canvas.width = cw * dpr; canvas.height = ch * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (pts.length === 0) {
-      build(); // 首次初始化：立即建网格（不能被每帧 rAF 重置的定时器饿死）
-    } else {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(build, 150); // 窗口 resize：防抖重建
-    }
-  };
-  resize();
-
-  const onMove = e => {
-    if (isStatic) return;
-    const r = canvas.getBoundingClientRect();
-    m.x = e.clientX - r.left; m.y = e.clientY - r.top;
-    requestFrame();
-  };
-  window.addEventListener('mousemove', onMove);
-
-  const requestFrame = () => { paused = false; cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); };
-
-  function frame(now) {
-    if (!document.getElementById('grid').isConnected) return;
-    if (now - last < STEP) { raf = requestAnimationFrame(frame); return; }
-    last = now - (now - last) % STEP;
-
-    resize(); // 每帧检查尺寸（含暂停恢复路径）
-    if (pts.length === 0) { raf = requestAnimationFrame(frame); return; }
-    ctx.clearRect(0, 0, cw, ch);
-
-    const mx = m.x, my = m.y;
-    let maxSpeed = 0;
-
-    // 物理更新：鼠标排斥 + 弹簧回位 + 阻尼
-    for (const p of pts) {
-      const dx = p.x - mx, dy = p.y - my;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < 140 && d > .1) {
-        const f = (1 - d / 140) * 30;
-        p.vx += (dx / d) * f * .1;
-        p.vy += (dy / d) * f * .1;
-      }
-      p.vx += .05 * (p.restX - p.x);
-      p.vy += .05 * (p.restY - p.y);
-      p.vx *= .85; p.vy *= .85;
-      p.x += p.vx; p.y += p.vy;
-      maxSpeed = Math.max(maxSpeed, Math.abs(p.vx) + Math.abs(p.vy));
-    }
-
-    // 水平连线
-    ctx.strokeStyle = lineColor + lineOpacity + ')';
-    ctx.lineWidth = .5;
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols - 1; c++) {
-        const a = pts[r * cols + c], b = pts[r * cols + c + 1];
-        const dx = b.x - a.x, dy = b.y - a.y;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        if (d < 20) continue;
-        const ux = dx / d, uy = dy / d;
-        ctx.beginPath();
-        ctx.moveTo(a.x + 10 * ux, a.y + 10 * uy);
-        ctx.lineTo(b.x - 10 * ux, b.y - 10 * uy);
-        ctx.stroke();
-      }
-    // 垂直连线
-    for (let c = 0; c < cols; c++)
-      for (let r = 0; r < rows - 1; r++) {
-        const a = pts[r * cols + c], b = pts[(r + 1) * cols + c];
-        const dx = b.x - a.x, dy = b.y - a.y;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        if (d < 20) continue;
-        const ux = dx / d, uy = dy / d;
-        ctx.beginPath();
-        ctx.moveTo(a.x + 10 * ux, a.y + 10 * uy);
-        ctx.lineTo(b.x - 10 * ux, b.y - 10 * uy);
-        ctx.stroke();
-      }
-
-    // 点：靠近鼠标变大变亮
-    for (const p of pts) {
-      let r = 1.8, a = dotOpacity;
-      if (!isNaN(mx) && !isNaN(my)) {
-        const d = Math.sqrt((p.x - mx) ** 2 + (p.y - my) ** 2);
-        const t = Math.max(0, 1 - d / 140);
-        r = 1.8 + 2 * t;
-        a = dotOpacity + .4 * t;
-      }
-      ctx.globalAlpha = a;
-      ctx.fillRect(p.x - r, p.y - r, 2 * r, 2 * r);
-    }
-    ctx.globalAlpha = 1;
-
-    if (maxSpeed < .01) {
-      // 静止：保留低频 rAF 仅做尺寸检查（避免窗口变化后网格错位）
-      paused = true;
-      raf = setTimeout(() => {
-        resize();
-        if (cw !== canvas.clientWidth || ch !== canvas.clientHeight) requestFrame();
-        else requestAnimationFrame(frame);
-      }, 500);
-      return;
-    }
-    raf = requestAnimationFrame(frame);
-  }
-  raf = requestAnimationFrame(frame);
-})();
 </script>
 </body>
 </html>

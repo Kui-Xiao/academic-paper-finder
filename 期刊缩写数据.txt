@@ -1,0 +1,130 @@
+# ====== 核心期刊缩写映射表 ======
+# 格式: 全称（bib 中 journal / booktitle 的原文） -> 标准缩写
+# 匹配: 大小写不敏感；输入先压缩空白、去掉开头的 "The "；带冒号的长刊名
+#       （如 NIM-A 的 ": Accelerators, Spectrometers, ..."）会再用冒号前一段查一次
+# 优先级（页面「doi.org BibTeX」按钮）: ① INSPIRE 文献库(按DOI) → ② INSPIRE 期刊库(按ISSN)
+#       → ③ 本表 → ④ 出版商全名（不猜）。标了 "# INSPIRE: xxx" 的条目，INSPIRE 查到时用
+#       INSPIRE 的写法，本表值只在 INSPIRE 查不到该刊时生效。
+# 同步到页面: python3 tools/build_journal_map.py  （把本表**一次性写进** index.html 的 BIB_JOURNAL_MAP）
+# 注意: 网页**不读取本文件**——表已内联在 index.html 里，运行时不依赖任何外部文件；
+#       本文件 + tools/ 只是本地维护用，删掉/移走都不影响网页。
+
+JOURNAL_MAP = {
+    # === APS 系列 ===
+    "Physical Review C": "Phys. Rev. C",
+    "Physical Review Letters": "Phys. Rev. Lett.",
+    "Physical Review B": "Phys. Rev. B",
+    "Physical Review A": "Phys. Rev. A",
+    "Physical Review D": "Phys. Rev. D",
+    "Physical Review E": "Phys. Rev. E",
+    "Physical Review": "Phys. Rev.",
+    "Reviews of Modern Physics": "Rev. Mod. Phys.",
+    "Physical Review X": "Phys. Rev. X",
+    "Physical Review B - Condensed Matter and Materials Physics": "Phys. Rev. B",
+    "Physical Review C - Nuclear Physics": "Phys. Rev. C",
+    "Physical Review D - Particles, Fields, Gravitation, and Cosmology": "Phys. Rev. D",
+    "Physical Review Research": "Phys. Rev. Research",
+    "Physical Review Applied": "Phys. Rev. Applied",
+    "Physical Review Fluids": "Phys. Rev. Fluids",
+    "Physical Review Materials": "Phys. Rev. Materials",
+    "Physical Review Accelerators and Beams": "Phys. Rev. Accel. Beams",
+    "Physical Review Special Topics - Accelerators and Beams": "Phys. Rev. ST Accel. Beams",
+    "Physical Review Physics Education Research": "Phys. Rev. Phys. Educ. Res.",
+    "Physical Review Special Topics - Physics Education Research": "Phys. Rev. ST Phys. Educ. Res.",
+    "PRX Quantum": "PRX Quantum",
+
+    # === Elsevier 核物理系列 ===
+    "Nuclear Physics A": "Nucl. Phys. A",
+    "Nuclear Physics B": "Nucl. Phys. B",
+    "Nuclear Physics": "Nucl. Phys.",
+    "Physics Letters B": "Phys. Lett. B",
+    "Physics Letters A": "Phys. Lett. A",
+    "Physics Letters": "Phys. Lett.",
+    "Physics Reports": "Phys. Rep.",  # INSPIRE 写 Phys. Rept.
+    "Progress in Particle and Nuclear Physics": "Prog. Part. Nucl. Phys.",
+    "Annals of Physics": "Ann. Phys.",  # INSPIRE 写 Annals Phys.
+    "Atomic Data and Nuclear Data Tables": "At. Data Nucl. Data Tables",  # INSPIRE 写 Atom. Data Nucl. Data Tabl.
+    "Nuclear Data Sheets": "Nucl. Data Sheets",
+    "Nuclear Instruments and Methods in Physics Research Section A": "Nucl. Instrum. Methods Phys. Res. A",  # INSPIRE 写 Nucl. Instrum. Meth. A
+    "Nuclear Instruments and Methods in Physics Research Section B": "Nucl. Instrum. Methods Phys. Res. B",  # INSPIRE 写 Nucl. Instrum. Meth. B
+    "Nuclear Instruments and Methods": "Nucl. Instrum. Methods",
+    "Computer Physics Communications": "Comput. Phys. Commun.",
+    "Nuclear Instruments and Methods in Physics Research Section A: Accelerators, Spectrometers, Detectors and Associated Equipment": "Nucl. Instrum. Methods Phys. Res. A",
+    "Nuclear Instruments and Methods in Physics Research Section B: Beam Interactions with Materials and Atoms": "Nucl. Instrum. Methods Phys. Res. B",
+
+    # === Springer 系列 ===
+    "The European Physical Journal A": "Eur. Phys. J. A",
+    "The European Physical Journal Plus": "Eur. Phys. J. Plus",
+    "The European Physical Journal Special Topics": "Eur. Phys. J. Spec. Top.",  # INSPIRE 写 Eur. Phys. J. ST
+    "The European Physical Journal": "Eur. Phys. J.",
+    "The European Physical Journal A: Hadrons and Nuclei": "Eur. Phys. J. A",
+    "The European Physical Journal B": "Eur. Phys. J. B",
+    "Zeitschrift für Physik A Hadrons and Nuclei": "Z. Phys. A",
+    "Zeitschrift für Physik A": "Z. Phys. A",
+    "Il Nuovo Cimento A": "Nuovo Cimento A",  # INSPIRE 写 Nuovo Cim. A
+    "Few-Body Systems": "Few-Body Syst.",
+    "Hyperfine Interactions": "Hyperfine Interact.",
+    "Journal of Physics G: Nuclear and Particle Physics": "J. Phys. G: Nucl. Part. Phys.",  # INSPIRE 写 J. Phys. G
+    "Journal of Physics G": "J. Phys. G",
+    "The European Physical Journal C": "Eur. Phys. J. C",
+    "Progress of Theoretical and Experimental Physics": "PTEP",
+    "Progress of Theoretical Physics": "Prog. Theor. Phys.",
+
+    # === IOP/中国物理 ===
+    "Chinese Physics C": "Chin. Phys. C",
+    "Chinese Physics Letters": "Chin. Phys. Lett.",
+    "Chinese Physics B": "Chin. Phys. B",
+    "Chinese Science Bulletin": "Chin. Sci. Bull.",
+    "Science China Physics Mechanics and Astronomy": "Sci. China Phys. Mech. Astron.",
+    "Science China Physics, Mechanics & Astronomy": "Sci. China Phys. Mech. Astron.",
+    "Nuclear Science and Techniques": "Nucl. Sci. Tech.",
+    "Communications in Theoretical Physics": "Commun. Theor. Phys.",
+
+    # === Nature 系列 ===
+    "Nature": "Nature",
+    "Nature Physics": "Nat. Phys.",  # INSPIRE 写 Nature Phys.
+    "Nature Reviews Physics": "Nat. Rev. Phys.",  # INSPIRE 写 Nature Rev. Phys.
+    "Nature Communications": "Nat. Commun.",  # INSPIRE 写 Nature Commun.
+    "Scientific Reports": "Sci. Rep.",
+    "Communications Physics": "Commun. Phys.",
+    "Science": "Science",
+
+    # === 其他 ===
+    "The Journal of Chemical Physics": "J. Chem. Phys.",
+    "Journal of Physics: Conference Series": "J. Phys.: Conf. Ser.",  # INSPIRE 写 J. Phys. Conf. Ser.
+    "Physica Scripta": "Phys. Scr.",  # INSPIRE 写 Phys. Scripta
+    "Physics of Atomic Nuclei": "Phys. At. Nucl.",  # INSPIRE 写 Phys. Atom. Nucl.
+    "Physics of Particles and Nuclei": "Phys. Part. Nucl.",
+    "Physics of Particles and Nuclei Letters": "Phys. Part. Nucl. Lett.",
+    "Bulletin of the Russian Academy of Sciences Physics": "Bull. Russ. Acad. Sci. Phys.",
+    "Acta Physica Polonica B": "Acta Phys. Pol. B",  # INSPIRE 写 Acta Phys. Polon. B
+    "Acta Physica Sinica": "Acta Phys. Sin.",
+    "Pramana": "Pramana",
+    "Journal of the Physical Society of Japan": "J. Phys. Soc. Jpn.",  # INSPIRE 写 J. Phys. Soc. Jap.
+    "Journal of the Korean Physical Society": "J. Korean Phys. Soc.",
+    "Journal of Physics A": "J. Phys. A",
+    "Journal of Physics B": "J. Phys. B",
+    "Journal of Physics D": "J. Phys. D",
+    "Modern Physics Letters A": "Mod. Phys. Lett. A",
+    "International Journal of Modern Physics E": "Int. J. Mod. Phys. E",
+    "International Journal of Modern Physics A": "Int. J. Mod. Phys. A",
+    "Atoms": "Atoms",  # MDPI open access journal
+    "Universe": "Universe",
+    "Symmetry": "Symmetry",
+    "Annual Review of Nuclear and Particle Science": "Ann. Rev. Nucl. Part. Sci.",
+    "Reports on Progress in Physics": "Rept. Prog. Phys.",
+    "New Journal of Physics": "New J. Phys.",
+    "Journal of Physics A: Mathematical and Theoretical": "J. Phys. A",
+    "Journal of Physics: Condensed Matter": "J. Phys. Condens. Matter",
+    "The Astrophysical Journal": "Astrophys. J.",
+
+    # === 会议/DAE ===
+    "Proceedings of the DAE Symp. on Nucl. Phys": "Proc. DAE Symp. Nucl. Phys.",
+    "Proceedings of the DAE Symp. on Nucl. Phys.": "Proc. DAE Symp. Nucl. Phys.",
+    "AIP Conference Proceedings": "AIP Conf. Proc.",
+    "EPJ Web of Conferences": "EPJ Web Conf.",
+    "Acta Physica Polonica B Proceedings Supplement": "Acta Phys. Pol. B Proc. Suppl.",  # INSPIRE 写 Acta Phys. Polon. Supp.
+
+    # === HEP 高能物理 ===
+    "Journal of High Energy Physics": "JHEP",
+}
