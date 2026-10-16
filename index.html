@@ -229,8 +229,8 @@
         .search-result .journal { color: var(--brand); }
         .batch-toolbar { display: flex; flex-wrap: wrap; gap: 10px; }
         .batch-toolbar > * { flex: 0 1 auto; }
-        #cancelBatchButton, #clearLibraryButton { background: transparent; border: 1px solid var(--line); color: var(--muted); }
-        #cancelBatchButton { color: var(--danger); }
+        #cancelBatchButton, #cancelSearchButton, #clearLibraryButton { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+        #cancelBatchButton, #cancelSearchButton { color: var(--danger); }
         .info-box { background: #eff6ff; border-color: var(--brand); color: #344054; }
         body.dark-mode .info-box { background: #14213d; color: #cbd5e1; }
         .library-manager { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
@@ -360,6 +360,7 @@
             </div>
             <div class="button-group">
                 <button id="searchButton" type="button" class="btn-search">搜索 INSPIRE</button>
+                <button id="cancelSearchButton" type="button" style="display:none;">停止搜索</button>
                 <button id="clearSearchButton" type="button">清空条件</button>
             </div>
             <div id="searchResults" aria-live="polite"></div>
@@ -458,6 +459,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchAuthor = document.getElementById('searchAuthor');
     const searchYear = document.getElementById('searchYear');
     const searchButton = document.getElementById('searchButton');
+    const cancelSearchButton = document.getElementById('cancelSearchButton');
     const clearSearchButton = document.getElementById('clearSearchButton');
     const searchResults = document.getElementById('searchResults');
     const batchDoiInput = document.getElementById('batchDoiInput');
@@ -476,6 +478,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const batchResults = document.getElementById('batchResults');
     const LIBRARY_STORAGE_KEY = 'academicPaperLibraryV2';
     let activeBatchRun = 0;
+    let activeSearchRun = 0;
+    let searchController = null;
     let currentFulltextCandidate = '';
     let accumulatedBibtex = loadLibrary();
 
@@ -800,29 +804,61 @@ document.addEventListener('DOMContentLoaded', function() {
             actions.append(view, add); card.append(actions); searchResults.append(card);
         });
     }
+    function setSearchRunning(running) {
+        searchButton.disabled = running;
+        searchButton.textContent = running ? '搜索中…' : '搜索 INSPIRE';
+        cancelSearchButton.style.display = running ? '' : 'none';
+    }
+
     searchButton.addEventListener('click', async function() {
         const title = searchTitle.value.trim();
         const author = searchAuthor.value.trim();
         const year = searchYear.value.trim();
         if (!title && !author) { alert('请输入标题或作者'); return; }
-        const orig = this.textContent;
-        this.textContent = '搜索中...'; this.disabled = true;
+        const runId = ++activeSearchRun;
+        const controller = new AbortController();
+        searchController = controller;
+        let timedOut = false;
+        const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 15000);
+        setSearchRunning(true);
+        window._searchEntries = [];
         searchResults.textContent = '搜索中…';
         try {
             let q = '';
             if (title) q += 'title:' + encodeURIComponent(title);
             if (author) q += (q ? '+and+' : '') + 'authors:' + encodeURIComponent(author);
             if (year) q += (q ? '+and+' : '') + 'date:' + encodeURIComponent(year);
-            const r = await fetch('https://inspirehep.net/api/literature?q=' + q + '&format=bibtex&size=20');
+            const r = await fetch('https://inspirehep.net/api/literature?q=' + q + '&format=bibtex&size=20', { signal: controller.signal });
+            if (runId !== activeSearchRun) return;
             if (!r.ok) { searchResults.textContent = '搜索失败（HTTP ' + r.status + '）'; return; }
             const bib = await r.text();
+            if (runId !== activeSearchRun) return;
             if (bib.length < 10) { searchResults.textContent = '未找到结果'; return; }
             const entries = bib.split(/\n(?=@\w+)/);
             window._searchEntries = entries;
             renderSearchResults(entries);
-            this.textContent = '✓ 完成';
-        } catch(e) { searchResults.textContent = '搜索失败：' + (e.message || '网络错误'); this.textContent = '搜索失败'; }
-        setTimeout(() => { this.textContent = orig; this.style.backgroundColor = '#3498db'; this.disabled = false; }, 3000);
+        } catch(e) {
+            if (runId !== activeSearchRun) return;
+            if (e.name === 'AbortError') {
+                searchResults.textContent = timedOut ? '搜索超时（15 秒），请稍后重试。' : '搜索已停止。';
+            } else {
+                searchResults.textContent = '搜索失败：' + (e.message || '网络错误');
+            }
+        } finally {
+            clearTimeout(timeout);
+            if (runId === activeSearchRun) {
+                searchController = null;
+                setSearchRunning(false);
+            }
+        }
+    });
+    cancelSearchButton.addEventListener('click', function() {
+        if (!searchController) return;
+        activeSearchRun++;
+        searchController.abort();
+        searchController = null;
+        setSearchRunning(false);
+        searchResults.textContent = '搜索已停止。';
     });
     function viewSearchEntry(idx) {
         const e = window._searchEntries[idx];
@@ -930,7 +966,17 @@ document.addEventListener('DOMContentLoaded', function() {
         bibtexDisplay.style.display = 'none';
         doiInput.focus();
     });
-    clearSearchButton.addEventListener('click', function() { searchTitle.value = ''; searchAuthor.value = ''; searchYear.value = ''; searchResults.replaceChildren(); });
+    clearSearchButton.addEventListener('click', function() {
+        if (searchController) {
+            activeSearchRun++;
+            searchController.abort();
+            searchController = null;
+            setSearchRunning(false);
+        }
+        searchTitle.value = ''; searchAuthor.value = ''; searchYear.value = '';
+        window._searchEntries = [];
+        searchResults.replaceChildren();
+    });
     clearBatchButton.addEventListener('click', function() { batchDoiInput.value = ''; batchResults.replaceChildren(); batchProgress.style.display = 'none'; });
     clearLibraryButton.addEventListener('click', function() {
         if (!accumulatedBibtex.length) return;
